@@ -1,122 +1,905 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useMemo, useState } from "react";
+import {
+  NavLink, Navigate, Route, Routes, useLocation
+} from "react-router-dom";
+import {
+  Activity, BookOpen, ChartNoAxesCombined, ChevronDown, CirclePlus,
+  Clock3, LayoutDashboard, Menu, Search, Tags, Users, X,
+  Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info
+} from "lucide-react";
+import logoUrl from "./assets/logo.svg";
+import {
+  bookForCopy, categoryName, dateOnly, fullName, loadLibrary,
+  nextId, saveLibrary
+} from "./data/libraryService.js";
+import {
+  formatAfghanDate,
+  isOverdue,
+  toPersianDigits,
+  todayJalali
+} from "./utils/afghanDate.js";
+import AfghanDatePicker from "./components/AfghanDatePicker.jsx";
+import DynamicActivityChart from "./components/DynamicActivityChart.jsx";
+
+const NAV = [
+  { to: "/", label: "داشبورد", icon: LayoutDashboard, end: true },
+  { to: "/books", label: "کتاب‌ها", icon: BookOpen },
+  { to: "/authors", label: "نویسندگان", icon: Users },
+  { to: "/categories", label: "دسته‌بندی‌ها", icon: Tags },
+  { to: "/members", label: "اعضا", icon: Users },
+  { to: "/loans", label: "امانت‌ها", icon: Clock3 },
+  { to: "/reports", label: "گزارش‌ها", icon: ChartNoAxesCombined }
+];
+
+const PAGE_TITLES = {
+  "/": "داشبورد",
+  "/books": "کتاب‌ها",
+  "/authors": "نویسندگان",
+  "/categories": "دسته‌بندی‌ها",
+  "/members": "اعضا",
+  "/loans": "امانت‌ها",
+  "/reports": "گزارش‌ها"
+};
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [db, setDb] = useState(loadLibrary);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const location = useLocation();
+
+  useEffect(() => saveLibrary(db), [db]);
+  useEffect(() => {
+    setMobileNav(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3200);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  const notify = (message, type = "success") => setNotice({ message, type });
+  const pageTitle = PAGE_TITLES[location.pathname] || "کتابخانه";
+
+  return (
+    <div className="app-shell" dir="rtl">
+      {mobileNav && <button className="nav-scrim" aria-label="بستن منو" onClick={() => setMobileNav(false)} />}
+      <aside className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
+        <div className="brand">
+          <div className="brand-logo-container">
+            <img src={logoUrl} alt="لوگوی کتابخانه قلم" className="brand-logo-img" />
+          </div>
+          <button className="icon-button close-nav" onClick={() => setMobileNav(false)} aria-label="بستن"><X size={19} /></button>
+        </div>
+
+        <div className="nav-caption">منوی اصلی</div>
+        <nav className="nav-list">
+          {NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+              <Icon size={17} /><span>{label}</span>
+              {to === "/loans" && (
+                <span className="nav-count">
+                  {toPersianDigits(db.Loans.filter((l) => !l.Return_date).length)}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="sidebar-foot">
+          <div className="mini-avatar">م</div>
+          <div className="user-meta"><strong>مدیر کتابخانه</strong><span>سامانه یکپارچه قلم</span></div>
+          <ChevronDown size={15} />
+        </div>
+      </aside>
+
+      <main className="main-area">
+        <header className="topbar">
+          <button className="icon-button mobile-menu" onClick={() => setMobileNav(true)} aria-label="باز کردن منو"><Menu size={20} /></button>
+          <div className="breadcrumb">
+            <img src={logoUrl} alt="لوگو" className="breadcrumb-logo" />
+            <span>/</span>
+            <span>{pageTitle}</span>
+          </div>
+          <div className="topbar-side">
+            <div className="today-afghan-badge" title="تقویم هجری خورشیدی (معیار رسمی افغانستان)">
+              <Clock3 size={14} />
+              <span>{formatAfghanDate(new Date(), { format: "withWeekday" })}</span>
+            </div>
+            <div className="top-avatar" title="حساب مدیر">م</div>
+          </div>
+        </header>
+
+        <div className="page-wrap">
+          <Routes>
+            <Route path="/" element={<Dashboard db={db} />} />
+            <Route path="/books" element={<BooksPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/authors" element={<AuthorsPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/categories" element={<CategoriesPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/members" element={<MembersPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/loans" element={<LoansPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/reports" element={<ReportsPage db={db} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </main>
+
+      {notice && (
+        <div className={`toast ${notice.type}`}>
+          <span>{notice.type === "success" ? <CircleCheck size={18} /> : <CircleAlert size={18} />}</span>
+          {notice.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PageHeading({ title, subtitle, action }) {
+  return (
+    <div className="page-heading">
+      <div><h1>{title}</h1><p>{subtitle}</p></div>
+      {action}
+    </div>
+  );
+}
+
+function StatCard({ title, value, note, color, icon: Icon }) {
+  return (
+    <div className="stat-card">
+      <div className={`stat-icon ${color}`}><Icon size={18} /></div>
+      <div className="stat-title">{title}</div>
+      <div className={`stat-value ${color}`}>{toPersianDigits(value)}</div>
+      <div className="stat-note">{note}</div>
+    </div>
+  );
+}
+
+function Dashboard({ db }) {
+  const activeLoans = db.Loans.filter((loan) => !loan.Return_date);
+  const totalCopies = db.Copies.reduce((sum, c) => sum + Number(c.Total_Copies || 0), 0);
+  const available = db.Copies.reduce((sum, c) => sum + Number(c.Available_Copies || 0), 0);
+  const recentLoans = [...db.Loans].sort((a, b) => b.ID_Loans - a.ID_Loans).slice(0, 5);
+  const recentBooks = [...db.Books].sort((a, b) => b.ID_Books - a.ID_Books).slice(0, 5);
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      <PageHeading title="داشبورد مدیریت" subtitle="نمای کلی از وضعیت و موجودی کتابخانه" />
+      <div className="stats-grid">
+        <StatCard title="مجموع کتاب‌ها" value={db.Books.length} note={`${toPersianDigits(db.Books.length)} عنوان ثبت‌شده`} color="blue" icon={BookOpen} />
+        <StatCard title="نسخه‌های موجود" value={available} note={`از مجموع ${toPersianDigits(totalCopies)} نسخه`} color="green" icon={BookOpen} />
+        <StatCard title="امانت‌های فعال" value={activeLoans.length} note={`${toPersianDigits(activeLoans.length)} امانت جاری`} color="yellow" icon={Clock3} />
+        <StatCard title="اعضای کتابخانه" value={db.Members.length} note={`${toPersianDigits(db.Members.length)} عضو فعال`} color="purple" icon={Users} />
+      </div>
 
-      <div className="ticks"></div>
+      <div className="dashboard-grid">
+        <DynamicActivityChart db={db} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div><h2>کتاب‌های تازه</h2><p>آخرین عنوان‌های اضافه‌شده</p></div>
+            <NavLink className="text-link" to="/books">مشاهده همه</NavLink>
+          </div>
+          <div className="compact-list">
+            {recentBooks.map((book) => (
+              <div className="compact-row" key={book.ID_Books}>
+                <div className="book-cover"><BookOpen size={17} /></div>
+                <div className="compact-info">
+                  <strong>{book.Title}</strong>
+                  <span>{categoryName(db, book.Categories_ID_Category)}</span>
+                </div>
+                <span className="tiny-id" dir="ltr">#{toPersianDigits(book.ID_Books)}</span>
+              </div>
+            ))}
+            {!recentBooks.length && <EmptyState text="کتابی ثبت نشده است" />}
+          </div>
+        </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+        <section className="panel recent-loans">
+          <div className="panel-heading">
+            <div><h2>امانت‌های اخیر</h2><p>تراکنش‌های ثبت‌شده در تقویم خورشیدی</p></div>
+            <NavLink className="text-link" to="/loans">همه امانت‌ها</NavLink>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>عضو</th>
+                  <th>کتاب</th>
+                  <th>تاریخ امانت (خورشیدی)</th>
+                  <th>موعد بازگشت</th>
+                  <th>وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentLoans.map((loan) => {
+                  const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
+                  const book = bookForCopy(db, loan.Copies_ID_Copies);
+                  return (
+                    <tr key={loan.ID_Loans}>
+                      <td>{fullName(member)}</td>
+                      <td>{book?.Title || "—"}</td>
+                      <td className="date-cell">{formatAfghanDate(loan.Loan_date)}</td>
+                      <td className="date-cell">{formatAfghanDate(loan.Due_date)}</td>
+                      <td><StatusBadge loan={loan} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!recentLoans.length && <EmptyState text="امانتی ثبت نشده است" />}
+        </section>
+      </div>
     </>
-  )
+  );
 }
 
-export default App
+function EmptyState({ text }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon"><BookOpen size={20} /></div>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function StatusBadge({ loan }) {
+  if (loan.Return_date) return <span className="status returned">بازگشت‌شده</span>;
+  const overdue = isOverdue(loan.Due_date);
+  return <span className={`status ${overdue ? "overdue" : "active-status"}`}>{overdue ? "دیرشده" : "فعال"}</span>;
+}
+
+const configs = {
+  Books: {
+    title: "کتاب‌ها", singular: "کتاب", id: "ID_Books",
+    fields: [
+      { key: "Title", label: "عنوان کتاب", required: true },
+      { key: "ISBN", label: "شابک (ISBN)", dir: "ltr" },
+      { key: "Description", label: "توضیحات", type: "textarea" },
+      { key: "Categories_ID_Category", label: "دسته‌بندی", type: "select", source: "Categories", sourceId: "ID_Category", sourceLabel: "Name" },
+      { key: "Authors_ID_Authors", label: "نویسندگان", type: "multiselect", source: "Authors", sourceId: "ID_Authors", sourceLabel: "name" },
+      { key: "Total_Copies", label: "مجموع نسخه‌ها", type: "number", min: 0 },
+      { key: "Available_Copies", label: "نسخه‌های موجود", type: "number", min: 0 }
+    ],
+    columns: [
+      ["Title", "عنوان"], ["ISBN", "شابک"], ["Categories_ID_Category", "دسته‌بندی"], ["authors", "نویسندگان"], ["copies", "نسخه‌ها"]
+    ]
+  },
+  Authors: {
+    title: "نویسندگان", singular: "نویسنده", id: "ID_Authors",
+    fields: [
+      { key: "First_Name", label: "نام", required: true },
+      { key: "Last_Name", label: "نام خانوادگی", required: true }
+    ],
+    columns: [["name", "نام نویسنده"], ["bookCount", "کتاب‌های ثبت‌شده"]]
+  },
+  Categories: {
+    title: "دسته‌بندی‌ها", singular: "دسته‌بندی", id: "ID_Category",
+    fields: [{ key: "Name", label: "نام دسته‌بندی", required: true }],
+    columns: [["Name", "نام دسته‌بندی"], ["bookCount", "تعداد کتاب‌ها"]]
+  },
+  Members: {
+    title: "اعضا", singular: "عضو", id: "ID_Members",
+    fields: [
+      { key: "First_Name", label: "نام", required: true },
+      { key: "Last_Name", label: "نام خانوادگی", required: true },
+      { key: "Email", label: "ایمیل", type: "email", dir: "ltr" },
+      { key: "Contact", label: "شماره تماس", dir: "ltr" },
+      { key: "Joined_Date", label: "تاریخ عضویت (خورشیدی)", type: "date" }
+    ],
+    columns: [["name", "نام عضو"], ["Email", "ایمیل"], ["Contact", "شماره تماس"], ["Joined_Date", "تاریخ عضویت"]]
+  }
+};
+
+function getColumnValue(key, row, db) {
+  if (key === "name") return fullName(row);
+  if (key === "Joined_Date") return formatAfghanDate(row[key]);
+  if (key === "authors") return (row.Authors_ID_Authors || []).map((id) => {
+    const author = db.Authors.find((a) => a.ID_Authors === Number(id));
+    return fullName(author);
+  }).filter(Boolean).join("، ") || "—";
+  if (key === "copies") {
+    const c = db.Copies.find((item) => item.Books_ID_Books === row.ID_Books);
+    return c ? `${toPersianDigits(c.Available_Copies)} از ${toPersianDigits(c.Total_Copies)}` : "—";
+  }
+  if (key === "bookCount") {
+    const count = ("ID_Authors" in row)
+      ? db.Books.filter((b) => b.Authors_ID_Authors?.includes(row.ID_Authors)).length
+      : db.Books.filter((b) => b.Categories_ID_Category === row.ID_Category).length;
+    return toPersianDigits(count);
+  }
+  if (key === "Categories_ID_Category") return categoryName(db, row[key]);
+  return row[key] || "—";
+}
+
+function CrudPage({ kind, db, setDb, notify }) {
+  const config = configs[kind];
+  const [query, setQuery] = useState("");
+  const [modal, setModal] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [sort, setSort] = useState({ key: config.columns[0][0], direction: 1 });
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = db[kind].filter((row) => {
+      const searchable = `${Object.values(row).join(" ")} ${fullName(row)}`.toLowerCase();
+      return searchable.includes(q);
+    });
+    return filtered.sort((a, b) => {
+      const av = String(getColumnValue(sort.key, a, db));
+      const bv = String(getColumnValue(sort.key, b, db));
+      return av.localeCompare(bv, "fa") * sort.direction;
+    });
+  }, [db, kind, query, sort]);
+
+  function saveRecord(values) {
+    const idField = config.id;
+    const existing = modal?.row;
+    const id = existing?.[idField] ?? nextId(db[kind], idField);
+    const record = { ...values, [idField]: id };
+
+    if (kind === "Books") {
+      const total = Math.max(0, Number(values.Total_Copies) || 0);
+      const available = Math.max(0, Math.min(total, Number(values.Available_Copies) || 0));
+      delete record.Total_Copies;
+      delete record.Available_Copies;
+      const copy = db.Copies.find((c) => c.Books_ID_Books === id);
+      const copies = copy
+        ? db.Copies.map((c) => c.Books_ID_Books === id ? { ...c, Total_Copies: total, Available_Copies: available } : c)
+        : [...db.Copies, { ID_Copies: nextId(db.Copies, "ID_Copies"), Books_ID_Books: id, Total_Copies: total, Available_Copies: available }];
+      setDb({ ...db, Books: existing ? db.Books.map((b) => b.ID_Books === id ? record : b) : [...db.Books, record], Copies: copies });
+    } else {
+      const duplicate = kind === "Categories" && db.Categories.some((c) => c.Name.trim().toLowerCase() === String(values.Name).trim().toLowerCase() && c.ID_Category !== id);
+      if (duplicate) return notify("این دسته‌بندی قبلاً ثبت شده است.", "error");
+      setDb({ ...db, [kind]: existing ? db[kind].map((r) => r[idField] === id ? record : r) : [...db[kind], record] });
+    }
+    setModal(null);
+    notify(existing ? "تغییرات ذخیره شد." : "مورد جدید با موفقیت ثبت شد.");
+  }
+
+  function remove(row) {
+    if (!window.confirm(`آیا از حذف این ${config.singular} مطمئن هستید؟`)) return;
+    if (kind === "Books") {
+      const copy = db.Copies.find((c) => c.Books_ID_Books === row.ID_Books);
+      if (copy && db.Loans.some((l) => l.Copies_ID_Copies === copy.ID_Copies && !l.Return_date)) {
+        return notify("این کتاب دارای امانت فعال است و حذف نمی‌شود.", "error");
+      }
+      setDb({ ...db, Books: db.Books.filter((b) => b.ID_Books !== row.ID_Books), Copies: db.Copies.filter((c) => c.Books_ID_Books !== row.ID_Books) });
+    } else if (kind === "Authors") {
+      setDb({ ...db, Authors: db.Authors.filter((a) => a.ID_Authors !== row.ID_Authors), Books: db.Books.map((b) => ({ ...b, Authors_ID_Authors: (b.Authors_ID_Authors || []).filter((id) => id !== row.ID_Authors) })) });
+    } else if (kind === "Categories") {
+      if (db.Books.some((b) => b.Categories_ID_Category === row.ID_Category)) return notify("ابتدا دسته‌بندی کتاب‌های مرتبط را تغییر دهید.", "error");
+      setDb({ ...db, Categories: db.Categories.filter((c) => c.ID_Category !== row.ID_Category) });
+    } else {
+      if (db.Loans.some((l) => l.Members_ID_Members === row.ID_Members && !l.Return_date)) return notify("این عضو دارای امانت فعال است و حذف نمی‌شود.", "error");
+      setDb({ ...db, Members: db.Members.filter((m) => m.ID_Members !== row.ID_Members) });
+    }
+    notify("مورد با موفقیت حذف شد.");
+  }
+
+  const formRow = modal?.row ? { ...modal.row } : kind === "Books" ? {
+    Categories_ID_Category: "", Authors_ID_Authors: [],
+    Total_Copies: 0, Available_Copies: 0
+  } : kind === "Members" ? { Joined_Date: dateOnly() } : {};
+
+  return (
+    <>
+      <PageHeading title={config.title} subtitle={`مدیریت و فهرست ${config.title}`} action={
+        <button className="primary-button" onClick={() => setModal({ row: null })}><CirclePlus size={17} /> افزودن {config.singular}</button>
+      } />
+      <section className="panel data-panel">
+        <div className="toolbar">
+          <label className="search-box"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`جست‌وجو در ${config.title}...`} /></label>
+          <span className="result-count">{toPersianDigits(rows.length)} مورد</span>
+        </div>
+        <div className="table-scroll"><table className="data-table">
+          <thead><tr>{config.columns.map(([key, label]) => <th key={key}><button className="sort-button" onClick={() => setSort({ key, direction: sort.key === key ? -sort.direction : 1 })}>{label}<ArrowUpDown size={13} /></button></th>)}<th>عملیات</th></tr></thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row[config.id]}>
+                {config.columns.map(([key]) => (
+                  <td key={key} className={key === "Joined_Date" ? "date-cell" : ""} dir={key === "ISBN" || key === "Email" || key === "Contact" ? "ltr" : undefined}>
+                    {getColumnValue(key, row, db)}
+                  </td>
+                ))}
+                <td><div className="row-actions">
+                  <button className="action-icon" title="جزئیات" onClick={() => setDetail(row)}><Eye size={16} /></button>
+                  <button className="action-icon" title="ویرایش" onClick={() => setModal({ row })}><Pencil size={16} /></button>
+                  <button className="action-icon danger" title="حذف" onClick={() => remove(row)}><Trash2 size={16} /></button>
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+        {!rows.length && <EmptyState text={query ? "نتیجه‌ای پیدا نشد" : "هنوز موردی ثبت نشده است"} />}
+      </section>
+      {modal && <RecordModal title={`${modal.row ? "ویرایش" : "افزودن"} ${config.singular}`} fields={config.fields} initial={formRow} db={db} onClose={() => setModal(null)} onSave={saveRecord} />}
+      {detail && <DetailModal kind={kind} row={detail} db={db} onClose={() => setDetail(null)} />}
+    </>
+  );
+}
+
+function RecordModal({ title, fields, initial, db, onClose, onSave }) {
+  const [values, setValues] = useState(initial);
+  const [error, setError] = useState("");
+
+  function submit(e) {
+    e.preventDefault();
+    for (const field of fields) {
+      if (field.required && !values[field.key]) return setError(`فیلد «${field.label}» الزامی است.`);
+      if (field.key === "Available_Copies" && Number(values[field.key]) > Number(values.Total_Copies)) return setError("نسخه‌های موجود نمی‌تواند بیشتر از مجموع نسخه‌ها باشد.");
+    }
+    setError("");
+    onSave(values);
+  }
+
+  function change(key, value) { setValues((v) => ({ ...v, [key]: value })); }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="modal" onSubmit={submit}>
+        <div className="modal-header">
+          <div><h2>{title}</h2><p>اطلاعات را وارد نموده و ذخیره فرمایید.</p></div>
+          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+        </div>
+        <div className="form-grid">
+          {fields.map((field) => {
+            if (field.type === "date") {
+              return (
+                <div key={field.key} className="form-field">
+                  <AfghanDatePicker
+                    value={values[field.key]}
+                    onChange={(isoDate) => change(field.key, isoDate)}
+                    label={field.label}
+                    required={field.required}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <label key={field.key} className={`form-field ${field.type === "textarea" || field.type === "multiselect" ? "wide" : ""}`}>
+                <span>{field.label}{field.required && <i className="req-star"> *</i>}</span>
+                {field.type === "select" ? (
+                  <select value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
+                    <option value="">انتخاب کنید</option>
+                    {(db[field.source] || []).map((item) => (
+                      <option key={item[field.sourceId]} value={item[field.sourceId]}>
+                        {item[field.sourceLabel] === "name" ? fullName(item) : item[field.sourceLabel]}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.type === "multiselect" ? (
+                  <select multiple value={values[field.key] || []} onChange={(e) => change(field.key, [...e.target.selectedOptions].map((o) => Number(o.value)))}>
+                    {(db[field.source] || []).map((item) => (
+                      <option key={item[field.sourceId]} value={item[field.sourceId]}>{fullName(item)}</option>
+                    ))}
+                  </select>
+                ) : field.type === "textarea" ? (
+                  <textarea rows="3" value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
+                ) : (
+                  <input type={field.type || "text"} min={field.min} dir={field.dir} value={values[field.key] ?? ""} onChange={(e) => change(field.key, field.type === "number" ? e.target.value : e.target.value)} />
+                )}
+                {field.type === "multiselect" && <small>برای انتخاب چند گزینه، کلید Ctrl یا ⌘ را نگه دارید.</small>}
+              </label>
+            );
+          })}
+        </div>
+        {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
+          <button className="primary-button" type="submit">ذخیره اطلاعات</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function DetailModal({ kind, row, db, onClose }) {
+  const config = configs[kind];
+  let extra = null;
+  if (kind === "Authors") {
+    const books = db.Books.filter((b) => b.Authors_ID_Authors?.includes(row.ID_Authors));
+    extra = <div className="detail-related"><strong>کتاب‌های مرتبط</strong>{books.length ? books.map((b) => <span key={b.ID_Books}>{b.Title}</span>) : <span>کتابی ثبت نشده است</span>}</div>;
+  } else if (kind === "Members") {
+    const loans = db.Loans.filter((l) => l.Members_ID_Members === row.ID_Members);
+    extra = <div className="detail-related"><strong>امانت‌های عضو</strong><span>{toPersianDigits(loans.length)} امانت ثبت‌شده</span></div>;
+  } else if (kind === "Books") {
+    const copy = db.Copies.find((c) => c.Books_ID_Books === row.ID_Books);
+    extra = <div className="detail-related"><strong>موجودی</strong><span>{copy ? `${toPersianDigits(copy.Available_Copies)} نسخه از ${toPersianDigits(copy.Total_Copies)} نسخه موجود` : "موجودی ثبت نشده است"}</span></div>;
+  }
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal detail-modal">
+        <div className="modal-header">
+          <div><h2>جزئیات {config.singular}</h2><p>شناسه سیستمی: <bdi>{toPersianDigits(row[config.id])}</bdi></p></div>
+          <button className="icon-button" onClick={onClose}><X size={19} /></button>
+        </div>
+        <div className="detail-list">
+          {config.fields.map((field) => (
+            <div key={field.key}>
+              <span>{field.label}</span>
+              <strong>
+                {field.key === "Joined_Date"
+                  ? formatAfghanDate(row[field.key], { format: "withWeekday" })
+                  : field.key === "Categories_ID_Category"
+                  ? categoryName(db, row[field.key])
+                  : field.key === "Authors_ID_Authors"
+                  ? (row[field.key] || []).map((id) => fullName(db.Authors.find((a) => a.ID_Authors === id))).join("، ")
+                  : row[field.key] || "—"}
+              </strong>
+            </div>
+          ))}
+        </div>
+        {extra}
+        <div className="modal-actions"><button className="primary-button" onClick={onClose}>بستن پنجره</button></div>
+      </div>
+    </div>
+  );
+}
+
+function BooksPage(props) { return <CrudPage kind="Books" {...props} />; }
+function AuthorsPage(props) { return <CrudPage kind="Authors" {...props} />; }
+function CategoriesPage(props) { return <CrudPage kind="Categories" {...props} />; }
+function MembersPage(props) { return <CrudPage kind="Members" {...props} />; }
+
+function LoansPage({ db, setDb, notify }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [fineLoan, setFineLoan] = useState(null);
+
+  const loans = [...db.Loans].sort((a, b) => b.ID_Loans - a.ID_Loans).filter((loan) => {
+    const book = bookForCopy(db, loan.Copies_ID_Copies);
+    const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
+    const matchesQuery = `${book?.Title || ""} ${fullName(member)}`.toLowerCase().includes(query.toLowerCase());
+    const overdue = isOverdue(loan.Due_date);
+    const status = loan.Return_date ? "returned" : overdue ? "overdue" : "active";
+    return matchesQuery && (filter === "all" || filter === status);
+  });
+
+  function issue(values) {
+    const copy = db.Copies.find((c) => c.Books_ID_Books === Number(values.bookId));
+    if (!copy) return notify("برای این کتاب موجودی تعریف نشده است.", "error");
+    if (copy.Available_Copies < 1) return notify("نسخهٔ قابل امانت موجود نیست.", "error");
+    const loan = {
+      ID_Loans: nextId(db.Loans, "ID_Loans"),
+      Members_ID_Members: Number(values.memberId),
+      Copies_ID_Copies: copy.ID_Copies,
+      Loan_date: values.loanDate,
+      Due_date: values.dueDate,
+      Return_date: null,
+      Fine_Amount: 0
+    };
+    setDb({
+      ...db,
+      Loans: [...db.Loans, loan],
+      Copies: db.Copies.map((c) => c.ID_Copies === copy.ID_Copies ? { ...c, Available_Copies: c.Available_Copies - 1 } : c)
+    });
+    setIssueOpen(false);
+    notify("امانت جدید با موفقیت ثبت شد.");
+  }
+
+  function returnLoan(loan, fine) {
+    if (!window.confirm("آیا بازگشت این کتاب به مخزن تأیید می‌شود؟")) return;
+    const copy = db.Copies.find((c) => c.ID_Copies === loan.Copies_ID_Copies);
+    setDb({
+      ...db,
+      Loans: db.Loans.map((l) => l.ID_Loans === loan.ID_Loans ? { ...l, Return_date: dateOnly(), Fine_Amount: Number(fine) || 0 } : l),
+      Copies: copy ? db.Copies.map((c) => c.ID_Copies === copy.ID_Copies ? { ...c, Available_Copies: Math.min(c.Total_Copies, c.Available_Copies + 1) } : c) : db.Copies
+    });
+    setFineLoan(null);
+    notify("بازگشت کتاب ثبت و موجودی مخزن به‌روزرسانی شد.");
+  }
+
+  const activeCount = db.Loans.filter((l) => !l.Return_date && !isOverdue(l.Due_date)).length;
+  const overdueCount = db.Loans.filter((l) => !l.Return_date && isOverdue(l.Due_date)).length;
+  const returnedCount = db.Loans.filter((l) => l.Return_date).length;
+
+  return (
+    <>
+      <PageHeading title="امانت‌ها" subtitle="مدیریت، ثبت و پیگیری امانت کتاب‌ها" action={
+        <button className="primary-button" onClick={() => setIssueOpen(true)}><CirclePlus size={17} /> ثبت امانت جدید</button>
+      } />
+      <div className="stats-grid loan-stats">
+        <StatCard title="همه امانت‌ها" value={db.Loans.length} note={`${toPersianDigits(db.Loans.length)} مورد ثبت‌شده`} color="blue" icon={Activity} />
+        <StatCard title="امانت‌های جاری" value={activeCount} note="در دست اعضا" color="green" icon={Clock3} />
+        <StatCard title="دیرشده‌ها" value={overdueCount} note="گذشته از موعد بازگشت" color="yellow" icon={CircleAlert} />
+        <StatCard title="بازگشت‌شده" value={returnedCount} note="تکمیل‌شده" color="purple" icon={CircleCheck} />
+      </div>
+
+      <section className="panel data-panel">
+        <div className="toolbar loan-toolbar">
+          <label className="search-box"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="جست‌وجوی نام عضو یا کتاب..." /></label>
+          <select className="filter-select" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">همه وضعیت‌ها</option>
+            <option value="active">امانت‌های جاری</option>
+            <option value="overdue">دیرشده‌ها</option>
+            <option value="returned">بازگشت‌شده‌ها</option>
+          </select>
+        </div>
+        <div className="table-scroll"><table>
+          <thead>
+            <tr>
+              <th>عضو</th>
+              <th>کتاب</th>
+              <th>تاریخ امانت</th>
+              <th>موعد بازگشت</th>
+              <th>تاریخ بازگشت</th>
+              <th>جریمه (افغانی)</th>
+              <th>وضعیت / عملیات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loans.map((loan) => {
+              const book = bookForCopy(db, loan.Copies_ID_Copies);
+              const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
+              return (
+                <tr key={loan.ID_Loans}>
+                  <td>{fullName(member) || "—"}</td>
+                  <td>{book?.Title || "—"}</td>
+                  <td className="date-cell">{formatAfghanDate(loan.Loan_date)}</td>
+                  <td className="date-cell">{formatAfghanDate(loan.Due_date)}</td>
+                  <td className="date-cell">{loan.Return_date ? formatAfghanDate(loan.Return_date) : "—"}</td>
+                  <td>{toPersianDigits(Number(loan.Fine_Amount || 0))}</td>
+                  <td>
+                    <div className="loan-action">
+                      <StatusBadge loan={loan} />
+                      {!loan.Return_date && (
+                        <button className="small-button" onClick={() => setFineLoan(loan)}>ثبت بازگشت</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table></div>
+        {!loans.length && <EmptyState text="امانتی با این شرایط پیدا نشد" />}
+      </section>
+
+      {issueOpen && <IssueModal db={db} onClose={() => setIssueOpen(false)} onSave={issue} />}
+      {fineLoan && <ReturnModal loan={fineLoan} db={db} onClose={() => setFineLoan(null)} onSave={(amount) => returnLoan(fineLoan, amount)} />}
+    </>
+  );
+}
+
+function IssueModal({ db, onClose, onSave }) {
+  // Default loan date is today, default due date is +14 days
+  const todayIso = dateOnly();
+  const defaultDue = new Date();
+  defaultDue.setDate(defaultDue.getDate() + 14);
+  const defaultDueIso = defaultDue.toISOString().slice(0, 10);
+
+  const [form, setForm] = useState({
+    memberId: "",
+    bookId: "",
+    loanDate: todayIso,
+    dueDate: defaultDueIso
+  });
+  const [error, setError] = useState("");
+
+  const availableBooks = db.Books.filter((b) => {
+    const copy = db.Copies.find((c) => c.Books_ID_Books === b.ID_Books);
+    return copy && copy.Available_Copies > 0;
+  });
+
+  function submit(e) {
+    e.preventDefault();
+    if (!form.memberId || !form.bookId || !form.loanDate || !form.dueDate) return setError("تکمیل تمام فیلدها الزامی است.");
+    if (form.dueDate < form.loanDate) return setError("موعد بازگشت نباید قبل از تاریخ امانت باشد.");
+    onSave(form);
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal" onSubmit={submit}>
+        <div className="modal-header">
+          <div><h2>ثبت امانت جدید</h2><p>انتخاب عضو و کتاب بر اساس تقویم خورشیدی</p></div>
+          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+        </div>
+        <div className="form-grid">
+          <label className="form-field">
+            <span>عضو امانت‌گیرنده <i className="req-star">*</i></span>
+            <select value={form.memberId} onChange={(e) => setForm({ ...form, memberId: e.target.value })}>
+              <option value="">انتخاب عضو...</option>
+              {db.Members.map((m) => <option key={m.ID_Members} value={m.ID_Members}>{fullName(m)}</option>)}
+            </select>
+          </label>
+
+          <label className="form-field">
+            <span>کتاب مورد نظر <i className="req-star">*</i></span>
+            <select value={form.bookId} onChange={(e) => setForm({ ...form, bookId: e.target.value })}>
+              <option value="">انتخاب کتاب...</option>
+              {availableBooks.map((b) => <option key={b.ID_Books} value={b.ID_Books}>{b.Title}</option>)}
+            </select>
+          </label>
+
+          <div className="form-field">
+            <AfghanDatePicker
+              label="تاریخ امانت"
+              required
+              value={form.loanDate}
+              onChange={(val) => setForm({ ...form, loanDate: val })}
+            />
+          </div>
+
+          <div className="form-field">
+            <AfghanDatePicker
+              label="موعد بازگشت"
+              required
+              value={form.dueDate}
+              onChange={(val) => setForm({ ...form, dueDate: val })}
+            />
+          </div>
+        </div>
+
+        <div className="info-note">
+          <Info size={16} />
+          <span>موعد بازگشت پیش‌فرض به میزان ۱۴ روز پس از امانت تنظیم شده است.</span>
+        </div>
+
+        {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
+          <button className="primary-button" type="submit">تأیید و ثبت امانت</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ReturnModal({ loan, db, onClose, onSave }) {
+  const overdue = isOverdue(loan.Due_date);
+  // Calculate overdue days
+  let daysLate = 0;
+  if (overdue && loan.Due_date) {
+    const dueTime = new Date(`${loan.Due_date}T00:00:00Z`).getTime();
+    const nowTime = new Date(`${dateOnly()}T00:00:00Z`).getTime();
+    daysLate = Math.max(0, Math.round((nowTime - dueTime) / 86400000));
+  }
+  const suggestedFine = daysLate * 5; // 5 Afghanis per day late
+  const [fine, setFine] = useState(loan.Fine_Amount || suggestedFine);
+
+  const book = bookForCopy(db, loan.Copies_ID_Copies);
+  const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal" onSubmit={(e) => { e.preventDefault(); onSave(fine); }}>
+        <div className="modal-header">
+          <div><h2>ثبت بازگشت کتاب</h2><p>کتاب: «{book?.Title}» — عضو: {fullName(member)}</p></div>
+          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+        </div>
+
+        <div className="detail-list" style={{ marginBottom: "14px" }}>
+          <div><span>تاریخ امانت</span><strong>{formatAfghanDate(loan.Loan_date)}</strong></div>
+          <div><span>موعد مقرر</span><strong>{formatAfghanDate(loan.Due_date)}</strong></div>
+          <div><span>تاریخ امروز</span><strong>{formatAfghanDate(dateOnly())}</strong></div>
+          <div><span>وضعیت بازگشت</span><strong style={{ color: overdue ? "#cf4e4e" : "#389e5a" }}>{overdue ? `${toPersianDigits(daysLate)} روز تاخیر` : "به‌موقع"}</strong></div>
+        </div>
+
+        <label className="form-field">
+          <span>مبلغ جریمه تاخیر (افغانی)</span>
+          <input type="number" min="0" value={fine} onChange={(e) => setFine(e.target.value)} />
+        </label>
+
+        {overdue && (
+          <div className="info-note">
+            <Info size={16} />
+            <span>محاسبه پیشنهادی: {toPersianDigits(daysLate)} روز تاخیر × ۵ افغانی = {toPersianDigits(suggestedFine)} افغانی</span>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
+          <button className="primary-button" type="submit">تأیید بازگشت و ثبت در سیستم</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ReportsPage({ db }) {
+  const [report, setReport] = useState("history");
+  const reports = {
+    history: { title: "تاریخچهٔ کامل امانت‌ها", rows: db.Loans },
+    overdue: { title: "امانت‌های دیرشده و نیازمند پیگیری", rows: db.Loans.filter((l) => !l.Return_date && isOverdue(l.Due_date)) },
+    availability: { title: "موجودی و تیراژ نسخه‌های کتاب", rows: db.Copies },
+    categories: { title: "توزیع عناوین بر اساس دسته‌بندی‌ها", rows: db.Categories },
+    fines: { title: "جریمه‌های وصول‌شده و ثبت‌شده", rows: db.Loans.filter((l) => Number(l.Fine_Amount) > 0) }
+  };
+  const selected = reports[report];
+
+  return (
+    <>
+      <PageHeading title="گزارش‌های کتابخانه" subtitle="تحلیل و بررسی داده‌های عملیاتی در تقویم رسمی افغانستان" />
+      <div className="report-tabs">
+        {[
+          ["history", "تاریخچه امانت‌ها"],
+          ["overdue", "دیرشده‌ها"],
+          ["availability", "موجودی نسخه‌ها"],
+          ["categories", "دسته‌بندی‌ها"],
+          ["fines", "جریمه‌ها"]
+        ].map(([key, label]) => (
+          <button key={key} className={report === key ? "selected" : ""} onClick={() => setReport(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <section className="panel data-panel">
+        <div className="panel-heading report-heading">
+          <div><h2>{selected.title}</h2><p>{toPersianDigits(selected.rows.length)} رکورد یافت شد</p></div>
+        </div>
+        <ReportTable kind={report} rows={selected.rows} db={db} />
+        {!selected.rows.length && <EmptyState text="داده‌ای برای این گزارش وجود ندارد" />}
+      </section>
+    </>
+  );
+}
+
+function ReportTable({ kind, rows, db }) {
+  if (kind === "availability") {
+    return (
+      <div className="table-scroll"><table>
+        <thead><tr><th>عنوان کتاب</th><th>مجموع نسخه‌ها</th><th>نسخه‌های موجود در مخزن</th></tr></thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.ID_Copies}>
+              <td>{db.Books.find((b) => b.ID_Books === c.Books_ID_Books)?.Title || "—"}</td>
+              <td>{toPersianDigits(c.Total_Copies)}</td>
+              <td>{toPersianDigits(c.Available_Copies)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    );
+  }
+
+  if (kind === "categories") {
+    return (
+      <div className="table-scroll"><table>
+        <thead><tr><th>نام دسته‌بندی</th><th>تعداد کتاب‌های ثبت‌شده</th></tr></thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.ID_Category}>
+              <td>{c.Name}</td>
+              <td>{toPersianDigits(db.Books.filter((b) => b.Categories_ID_Category === c.ID_Category).length)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    );
+  }
+
+  return (
+    <div className="table-scroll"><table>
+      <thead>
+        <tr>
+          <th>عضو</th>
+          <th>کتاب</th>
+          <th>تاریخ امانت</th>
+          <th>موعد بازگشت</th>
+          <th>تاریخ بازگشت</th>
+          <th>جریمه (افغانی)</th>
+          <th>وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((l) => (
+          <tr key={l.ID_Loans}>
+            <td>{fullName(db.Members.find((m) => m.ID_Members === l.Members_ID_Members)) || "—"}</td>
+            <td>{bookForCopy(db, l.Copies_ID_Copies)?.Title || "—"}</td>
+            <td className="date-cell">{formatAfghanDate(l.Loan_date)}</td>
+            <td className="date-cell">{formatAfghanDate(l.Due_date)}</td>
+            <td className="date-cell">{l.Return_date ? formatAfghanDate(l.Return_date) : "—"}</td>
+            <td>{toPersianDigits(Number(l.Fine_Amount || 0))}</td>
+            <td><StatusBadge loan={l} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+  );
+}
+
+export default App;
