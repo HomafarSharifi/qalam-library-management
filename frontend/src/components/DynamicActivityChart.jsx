@@ -12,24 +12,36 @@ export default function DynamicActivityChart({ db }) {
 
   const currentJalali = todayJalali();
 
-  // Compute monthly stats for Afghan months
+  // Compute monthly stats for Afghan months in proper calendar order
   const monthlyData = useMemo(() => {
-    const monthsCount = range === "6m" ? 6 : 12;
     const months = [];
 
-    for (let i = monthsCount - 1; i >= 0; i--) {
-      let mIndex = currentJalali.month - 1 - i;
-      let y = currentJalali.year;
-      while (mIndex < 0) {
-        mIndex += 12;
-        y -= 1;
+    if (range === "12m") {
+      // All 12 Afghan months in proper calendar order: حمل (1) to حوت (12)
+      for (let mIndex = 0; mIndex < 12; mIndex++) {
+        months.push({
+          year: currentJalali.year,
+          monthIndex: mIndex,
+          monthNumber: mIndex + 1,
+          name: AFGHAN_MONTHS[mIndex]
+        });
       }
-      months.push({
-        year: y,
-        monthIndex: mIndex,
-        monthNumber: mIndex + 1,
-        name: AFGHAN_MONTHS[mIndex]
-      });
+    } else {
+      // 6 recent months in chronological order leading up to current month
+      for (let i = 5; i >= 0; i--) {
+        let mIndex = currentJalali.month - 1 - i;
+        let y = currentJalali.year;
+        while (mIndex < 0) {
+          mIndex += 12;
+          y -= 1;
+        }
+        months.push({
+          year: y,
+          monthIndex: mIndex,
+          monthNumber: mIndex + 1,
+          name: AFGHAN_MONTHS[mIndex]
+        });
+      }
     }
 
     return months.map((m) => {
@@ -73,24 +85,26 @@ export default function DynamicActivityChart({ db }) {
   const usableWidth = svgWidth - paddingX * 2;
   const usableHeight = svgHeight - paddingY * 2;
 
-  // Calculate coordinates for points
+  // Calculate coordinates for points - Right to Left (RTL) progression
   const pointsLoans = useMemo(() => {
     const step = usableWidth / Math.max(1, monthlyData.length - 1);
     return monthlyData.map((d, idx) => {
-      const x = paddingX + idx * step;
+      // In RTL, index 0 starts on the right (svgWidth - paddingX) and progresses left
+      const x = svgWidth - paddingX - idx * step;
       const y = svgHeight - paddingY - (d.loansCount / maxVal) * usableHeight;
       return { x, y, value: d.loansCount, month: d.name, year: d.year };
     });
-  }, [monthlyData, maxVal, usableWidth, usableHeight, svgHeight]);
+  }, [monthlyData, maxVal, usableWidth, usableHeight, svgHeight, svgWidth]);
 
   const pointsReturns = useMemo(() => {
     const step = usableWidth / Math.max(1, monthlyData.length - 1);
     return monthlyData.map((d, idx) => {
-      const x = paddingX + idx * step;
+      // In RTL, index 0 starts on the right (svgWidth - paddingX) and progresses left
+      const x = svgWidth - paddingX - idx * step;
       const y = svgHeight - paddingY - (d.returnsCount / maxVal) * usableHeight;
       return { x, y, value: d.returnsCount, month: d.name, year: d.year };
     });
-  }, [monthlyData, maxVal, usableWidth, usableHeight, svgHeight]);
+  }, [monthlyData, maxVal, usableWidth, usableHeight, svgHeight, svgWidth]);
 
   // Generate smooth cubic bezier SVG path
   function createSmoothPath(points) {

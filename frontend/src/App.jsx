@@ -8,6 +8,10 @@ import {
   Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info
 } from "lucide-react";
 import logoUrl from "./assets/logo.svg";
+import profileUrl from "./assets/profile.png";
+import {
+  DashboardIcon, BookIcon, AuthorsIcon, CategoryIcon, UsersIcon, LoansIcon, ReportsIcon
+} from "./components/NavIcons.jsx";
 import {
   bookForCopy, categoryName, dateOnly, fullName, loadLibrary,
   nextId, saveLibrary
@@ -21,14 +25,29 @@ import {
 import AfghanDatePicker from "./components/AfghanDatePicker.jsx";
 import DynamicActivityChart from "./components/DynamicActivityChart.jsx";
 
-const NAV = [
-  { to: "/", label: "داشبورد", icon: LayoutDashboard, end: true },
-  { to: "/books", label: "کتاب‌ها", icon: BookOpen },
-  { to: "/authors", label: "نویسندگان", icon: Users },
-  { to: "/categories", label: "دسته‌بندی‌ها", icon: Tags },
-  { to: "/members", label: "اعضا", icon: Users },
-  { to: "/loans", label: "امانت‌ها", icon: Clock3 },
-  { to: "/reports", label: "گزارش‌ها", icon: ChartNoAxesCombined }
+const NAV_GROUPS = [
+  {
+    title: "عمومی",
+    items: [
+      { to: "/", label: "داشبورد", icon: DashboardIcon, end: true }
+    ]
+  },
+  {
+    title: "مخزن و منابع",
+    items: [
+      { to: "/books", label: "کتاب‌ها", icon: BookIcon },
+      { to: "/authors", label: "نویسندگان", icon: AuthorsIcon },
+      { to: "/categories", label: "دسته‌بندی‌ها", icon: CategoryIcon }
+    ]
+  },
+  {
+    title: "امانت و گردش",
+    items: [
+      { to: "/members", label: "اعضا", icon: UsersIcon },
+      { to: "/loans", label: "امانت‌ها", icon: LoansIcon },
+      { to: "/reports", label: "گزارش‌ها", icon: ReportsIcon }
+    ]
+  }
 ];
 
 const PAGE_TITLES = {
@@ -71,23 +90,37 @@ function App() {
           <button className="icon-button close-nav" onClick={() => setMobileNav(false)} aria-label="بستن"><X size={19} /></button>
         </div>
 
-        <div className="nav-caption">منوی اصلی</div>
-        <nav className="nav-list">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
-              <Icon size={17} /><span>{label}</span>
-              {to === "/loans" && (
-                <span className="nav-count">
-                  {toPersianDigits(db.Loans.filter((l) => !l.Return_date).length)}
-                </span>
-              )}
-            </NavLink>
+        <nav className="nav-groups">
+          {NAV_GROUPS.map((group) => (
+            <div className="nav-group" key={group.title}>
+              <div className="nav-caption">{group.title}</div>
+              <div className="nav-list">
+                {group.items.map(({ to, label, icon: Icon, end }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                  >
+                    <Icon size={18} />
+                    <span>{label}</span>
+                    {to === "/loans" && (
+                      <span className="nav-count">
+                        {toPersianDigits(db.Loans.filter((l) => !l.Return_date).length)}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
         <div className="sidebar-foot">
-          <div className="mini-avatar">م</div>
-          <div className="user-meta"><strong>مدیر کتابخانه</strong><span>سامانه یکپارچه قلم</span></div>
+          <div className="mini-avatar">
+            <img src={profileUrl} alt="تصویر پروفایل مدیر" className="avatar-img" />
+          </div>
+          <div className="user-meta"><strong>مدیر کتابخانه</strong><span>همافر شریفی</span></div>
           <ChevronDown size={15} />
         </div>
       </aside>
@@ -105,7 +138,9 @@ function App() {
               <Clock3 size={14} />
               <span>{formatAfghanDate(new Date(), { format: "withWeekday" })}</span>
             </div>
-            <div className="top-avatar" title="حساب مدیر">م</div>
+            <div className="top-avatar" title="حساب مدیر">
+              <img src={profileUrl} alt="تصویر پروفایل مدیر" className="avatar-img" />
+            </div>
           </div>
         </header>
 
@@ -154,11 +189,33 @@ function StatCard({ title, value, note, color, icon: Icon }) {
 }
 
 function Dashboard({ db }) {
+  const [bookTab, setBookTab] = useState("recent"); // "recent" | "top"
   const activeLoans = db.Loans.filter((loan) => !loan.Return_date);
   const totalCopies = db.Copies.reduce((sum, c) => sum + Number(c.Total_Copies || 0), 0);
   const available = db.Copies.reduce((sum, c) => sum + Number(c.Available_Copies || 0), 0);
   const recentLoans = [...db.Loans].sort((a, b) => b.ID_Loans - a.ID_Loans).slice(0, 5);
   const recentBooks = [...db.Books].sort((a, b) => b.ID_Books - a.ID_Books).slice(0, 5);
+
+  const bookLoanCounts = useMemo(() => {
+    const counts = {};
+    (db.Loans || []).forEach((loan) => {
+      const book = bookForCopy(db, loan.Copies_ID_Copies);
+      if (book) {
+        counts[book.ID_Books] = (counts[book.ID_Books] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [db.Loans, db.Copies, db.Books]);
+
+  const topBorrowedBooks = useMemo(() => {
+    return [...db.Books]
+      .map((b) => ({
+        ...b,
+        loanCount: bookLoanCounts[b.ID_Books] || 0
+      }))
+      .sort((a, b) => b.loanCount - a.loanCount || b.ID_Books - a.ID_Books)
+      .slice(0, 5);
+  }, [db.Books, bookLoanCounts]);
 
   return (
     <>
@@ -171,27 +228,72 @@ function Dashboard({ db }) {
       </div>
 
       <div className="dashboard-grid">
-        <DynamicActivityChart db={db} />
-
-        <section className="panel">
+        <section className="panel dashboard-books-panel">
           <div className="panel-heading">
-            <div><h2>کتاب‌های تازه</h2><p>آخرین عنوان‌های اضافه‌شده</p></div>
+            <div className="books-heading-wrap">
+              <div className="heading-title-group">
+                <h2>{bookTab === "recent" ? "کتاب‌های تازه" : "کتاب‌های پرامانت"}</h2>
+                <p>{bookTab === "recent" ? "آخرین عنوان‌های اضافه‌شده" : "بیشترین عنوان‌های امانت گرفته‌شده"}</p>
+              </div>
+              <div className="books-switch" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bookTab === "recent"}
+                  className={`switch-tab ${bookTab === "recent" ? "active" : ""}`}
+                  onClick={() => setBookTab("recent")}
+                >
+                  تازه‌ها
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bookTab === "top"}
+                  className={`switch-tab ${bookTab === "top" ? "active" : ""}`}
+                  onClick={() => setBookTab("top")}
+                >
+                  پرامانت‌ترین‌ها
+                </button>
+              </div>
+            </div>
             <NavLink className="text-link" to="/books">مشاهده همه</NavLink>
           </div>
           <div className="compact-list">
-            {recentBooks.map((book) => (
-              <div className="compact-row" key={book.ID_Books}>
-                <div className="book-cover"><BookOpen size={17} /></div>
-                <div className="compact-info">
-                  <strong>{book.Title}</strong>
-                  <span>{categoryName(db, book.Categories_ID_Category)}</span>
-                </div>
-                <span className="tiny-id" dir="ltr">#{toPersianDigits(book.ID_Books)}</span>
-              </div>
-            ))}
-            {!recentBooks.length && <EmptyState text="کتابی ثبت نشده است" />}
+            {bookTab === "recent" ? (
+              <>
+                {recentBooks.map((book) => (
+                  <div className="compact-row" key={book.ID_Books}>
+                    <div className="book-cover"><BookOpen size={17} /></div>
+                    <div className="compact-info">
+                      <strong>{book.Title}</strong>
+                      <span>{categoryName(db, book.Categories_ID_Category)}</span>
+                    </div>
+                    <span className="tiny-id" dir="ltr">#{toPersianDigits(book.ID_Books)}</span>
+                  </div>
+                ))}
+                {!recentBooks.length && <EmptyState text="کتابی ثبت نشده است" />}
+              </>
+            ) : (
+              <>
+                {topBorrowedBooks.map((book, idx) => (
+                  <div className="compact-row" key={book.ID_Books}>
+                    <div className="book-cover top-rank"><BookOpen size={17} /></div>
+                    <div className="compact-info">
+                      <strong>{book.Title}</strong>
+                      <span>{categoryName(db, book.Categories_ID_Category)}</span>
+                    </div>
+                    <span className="loan-count-badge">
+                      {toPersianDigits(book.loanCount)} بار امانت
+                    </span>
+                  </div>
+                ))}
+                {!topBorrowedBooks.length && <EmptyState text="امانتی ثبت نشده است" />}
+              </>
+            )}
           </div>
         </section>
+
+        <DynamicActivityChart db={db} />
 
         <section className="panel recent-loans">
           <div className="panel-heading">
@@ -253,7 +355,7 @@ const configs = {
     title: "کتاب‌ها", singular: "کتاب", id: "ID_Books",
     fields: [
       { key: "Title", label: "عنوان کتاب", required: true },
-      { key: "ISBN", label: "شابک (ISBN)", dir: "ltr" },
+      { key: "ISBN", label: "ISBN", dir: "ltr" },
       { key: "Description", label: "توضیحات", type: "textarea" },
       { key: "Categories_ID_Category", label: "دسته‌بندی", type: "select", source: "Categories", sourceId: "ID_Category", sourceLabel: "Name" },
       { key: "Authors_ID_Authors", label: "نویسندگان", type: "multiselect", source: "Authors", sourceId: "ID_Authors", sourceLabel: "name" },
@@ -261,7 +363,7 @@ const configs = {
       { key: "Available_Copies", label: "نسخه‌های موجود", type: "number", min: 0 }
     ],
     columns: [
-      ["Title", "عنوان"], ["ISBN", "شابک"], ["Categories_ID_Category", "دسته‌بندی"], ["authors", "نویسندگان"], ["copies", "نسخه‌ها"]
+      ["Title", "عنوان"], ["ISBN", "ISBN"], ["Categories_ID_Category", "دسته‌بندی"], ["authors", "نویسندگان"], ["copies", "نسخه‌ها"]
     ]
   },
   Authors: {

@@ -1,6 +1,3 @@
-/* ========================================================
-   Yekan Bakh Local Font Family
-   ======================================================== */
 @font-face {
   font-family: "Yekan Bakh";
   src: url("./assets/YekanBakh/Yekan Bakh Family/webfonts/woff2/YekanBakh-Light.woff2") format("woff2");
@@ -125,14 +122,14 @@ a {
    Sidebar & Brand (with Logo Replacement)
    ======================================================== */
 .sidebar {
-  width: 230px;
+  width: 236px;
   position: fixed;
   inset: 12px 12px 12px auto;
   z-index: 20;
   background: var(--sidebar-bg);
   border-radius: 14px;
   border: 1px solid #eef1f6;
-  padding: 18px 14px 14px;
+  padding: 16px 14px 14px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 18px rgba(22, 33, 54, 0.03);
@@ -143,9 +140,9 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 22px;
-  border-bottom: 1px solid #edf0f5;
-  margin-bottom: 14px;
+  padding: 4px 60px 18px;
+  border-bottom: 1.5px solid #edf0f5;
+  margin-bottom: 12px;
 }
 
 .brand-logo-container {
@@ -155,43 +152,65 @@ a {
 }
 
 .brand-logo-img {
-  height: 44px;
-  max-width: 155px;
+  height: 69px;
+  max-width: 190px;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 2px 5px rgba(25, 90, 220, 0.12));
+  filter: drop-shadow(0 2px 6px rgba(25, 90, 220, 0.14));
   transition: transform 0.25s var(--ease-soft), filter 0.25s var(--ease-soft);
 }
 
 .brand-logo-img:hover {
-  transform: translateY(-1px) scale(1.02);
-  filter: drop-shadow(0 4px 8px rgba(25, 90, 220, 0.18));
+  transform: translateY(-1px) scale(1.03);
+  filter: drop-shadow(0 4px 10px rgba(25, 90, 220, 0.2));
+}
+
+.nav-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
 }
 
 .nav-caption {
   color: #9da3ad;
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 0 10px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 10px 5px;
   letter-spacing: 0.2px;
 }
 
 .nav-list {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .nav-link {
   display: flex;
   gap: 11px;
   align-items: center;
-  color: #6a7180;
-  padding: 9.5px 12px;
+  color: #64748b;
+  padding: 8.5px 12px;
   border-radius: 9px;
   font-size: 12.5px;
   font-weight: 500;
   position: relative;
   transition: all 0.22s var(--ease-soft);
+}
+
+.nav-link .nav-icon-svg {
+  width: 19px;
+  height: 19px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: color 0.2s var(--ease-soft);
 }
 
 .nav-link:hover {
@@ -200,11 +219,19 @@ a {
   transform: translateX(-2px);
 }
 
+.nav-link:hover .nav-icon-svg {
+  color: var(--blue);
+}
+
 .nav-link.active {
   background: #e2edff;
   color: var(--blue);
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(40, 100, 215, 0.09);
+}
+
+.nav-link.active .nav-icon-svg {
+  color: var(--blue);
 }
 
 .nav-link.active::after {
@@ -244,16 +271,29 @@ a {
   display: grid;
   place-items: center;
   border-radius: 50%;
+  overflow: hidden;
   background: #e1ecfd;
   color: var(--blue);
-  font-weight: 700;
+  border: 1.5px solid #dbe6f6;
+  flex-shrink: 0;
   user-select: none;
 }
 
 .mini-avatar {
-  width: 32px;
-  height: 32px;
-  font-size: 13px;
+  width: 34px;
+  height: 34px;
+}
+
+.top-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .user-meta {
@@ -290,7 +330,7 @@ a {
   justify-content: space-between;
   padding: 0 30px;
   background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(5px);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -539,7 +579,7 @@ a {
    ======================================================== */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1.45fr 1fr;
+  grid-template-columns: 1fr 1.45fr;
   gap: 16px;
 }
 
@@ -551,6 +591,79 @@ a {
   min-width: 0;
   box-shadow: var(--shadow-card);
   transition: box-shadow 0.24s var(--ease-soft);
+}
+
+.dashboard-books-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.books-heading-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.heading-title-group h2 {
+  font-size: 14px;
+  margin: 0 0 3px;
+  font-weight: 700;
+  color: #202734;
+}
+
+.heading-title-group p {
+  margin: 0;
+  color: #9299a6;
+  font-size: 11px;
+}
+
+.books-switch {
+  display: inline-flex;
+  align-items: center;
+  background: #edf1f7;
+  padding: 2.5px;
+  border-radius: 8px;
+  gap: 3px;
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.switch-tab {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #64748b;
+  background: transparent;
+  transition: all 0.2s var(--ease-soft);
+}
+
+.switch-tab:hover {
+  color: var(--blue);
+}
+
+.switch-tab.active {
+  background: #ffffff;
+  color: var(--blue);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(18, 28, 45, 0.08);
+}
+
+.loan-count-badge {
+  margin-right: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-light);
+  padding: 2.5px 8.5px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.book-cover.top-rank {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
 }
 
 .panel-heading {
@@ -725,7 +838,7 @@ a {
   color: #9ba1ad;
   font-size: 10.5px;
   font-weight: 500;
-  padding: 8px 12px 0 35px;
+  padding: 8px 40px 0 75px;
   user-select: none;
 }
 
