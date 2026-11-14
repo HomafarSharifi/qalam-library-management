@@ -7,14 +7,14 @@ import {
   Clock3, LayoutDashboard, Menu, Search, Tags, Users, X,
   Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info
 } from "lucide-react";
-import logoUrl from "./assets/logo.svg";
+import logoUrl from "./assets/mark.svg";
 import profileUrl from "./assets/profile.png";
 import {
   DashboardIcon, BookIcon, AuthorsIcon, CategoryIcon, UsersIcon, LoansIcon, ReportsIcon
 } from "./components/NavIcons.jsx";
 import {
   bookForCopy, categoryName, dateOnly, fullName, loadLibrary,
-  nextId, saveLibrary
+  nextId, saveLibrary, api, fetchFullLibraryFromBackend
 } from "./data/libraryService.js";
 import {
   formatAfghanDate,
@@ -62,11 +62,34 @@ const PAGE_TITLES = {
 
 function App() {
   const [db, setDb] = useState(loadLibrary);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [notice, setNotice] = useState(null);
   const location = useLocation();
 
-  useEffect(() => saveLibrary(db), [db]);
+  const refreshDb = async () => {
+    try {
+      const liveData = await fetchFullLibraryFromBackend();
+      if (liveData) {
+        setDb(liveData);
+        setIsBackendConnected(true);
+        return liveData;
+      }
+    } catch {
+      setIsBackendConnected(false);
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    refreshDb();
+  }, []);
+
+  useEffect(() => {
+    if (!isBackendConnected) {
+      saveLibrary(db);
+    }
+  }, [db, isBackendConnected]);
   useEffect(() => {
     setMobileNav(false);
   }, [location.pathname]);
@@ -134,6 +157,13 @@ function App() {
             <span>{pageTitle}</span>
           </div>
           <div className="topbar-side">
+            <div
+              className={`connection-badge ${isBackendConnected ? "online" : "offline"}`}
+              title={isBackendConnected ? "متصل به وب‌سرویس بک‌اند (FastAPI & MySQL)" : "در حال کار در حالت محلی / آفلاین"}
+            >
+              <span className="status-dot" />
+              <span>{isBackendConnected ? "متصل به سرور" : "حالت آفلاین"}</span>
+            </div>
             <div className="today-afghan-badge" title="تقویم هجری خورشیدی (معیار رسمی افغانستان)">
               <Clock3 size={14} />
               <span>{formatAfghanDate(new Date(), { format: "withWeekday" })}</span>
@@ -147,11 +177,11 @@ function App() {
         <div className="page-wrap">
           <Routes>
             <Route path="/" element={<Dashboard db={db} />} />
-            <Route path="/books" element={<BooksPage db={db} setDb={setDb} notify={notify} />} />
-            <Route path="/authors" element={<AuthorsPage db={db} setDb={setDb} notify={notify} />} />
-            <Route path="/categories" element={<CategoriesPage db={db} setDb={setDb} notify={notify} />} />
-            <Route path="/members" element={<MembersPage db={db} setDb={setDb} notify={notify} />} />
-            <Route path="/loans" element={<LoansPage db={db} setDb={setDb} notify={notify} />} />
+            <Route path="/books" element={<BooksPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
+            <Route path="/authors" element={<AuthorsPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
+            <Route path="/categories" element={<CategoriesPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
+            <Route path="/members" element={<MembersPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
+            <Route path="/loans" element={<LoansPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
             <Route path="/reports" element={<ReportsPage db={db} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -413,7 +443,7 @@ function getColumnValue(key, row, db) {
   return row[key] || "—";
 }
 
-function CrudPage({ kind, db, setDb, notify }) {
+function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
   const config = configs[kind];
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(null);
@@ -422,7 +452,7 @@ function CrudPage({ kind, db, setDb, notify }) {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = db[kind].filter((row) => {
+    const filtered = (db[kind] || []).filter((row) => {
       const searchable = `${Object.values(row).join(" ")} ${fullName(row)}`.toLowerCase();
       return searchable.includes(q);
     });
@@ -433,12 +463,73 @@ function CrudPage({ kind, db, setDb, notify }) {
     });
   }, [db, kind, query, sort]);
 
-  function saveRecord(values) {
+  async function saveRecord(values) {
     const idField = config.id;
     const existing = modal?.row;
-    const id = existing?.[idField] ?? nextId(db[kind], idField);
+    const id = existing?.[idField] ?? nextId(db[kind] || [], idField);
     const record = { ...values, [idField]: id };
 
+    if (isBackendConnected) {
+      try {
+        if (kind === "Books") {
+          const total = Math.max(0, Number(values.Total_Copies) || 0);
+          const payload = {
+            Title: values.Title?.trim(),
+            ISBN: values.ISBN?.trim() || null,
+            Description: values.Description?.trim() || null,
+            Categories_ID_Category: Number(values.Categories_ID_Category),
+            Authors_ID_Authors: (values.Authors_ID_Authors || []).map(Number),
+            Total_Copies: total
+          };
+          if (existing) {
+            await api.updateBook(id, payload);
+            if (values.Total_Copies !== undefined) {
+              await api.updateBookCopies(id, { Total_Copies: total });
+            }
+          } else {
+            await api.createBook(payload);
+          }
+        } else if (kind === "Authors") {
+          const payload = {
+            First_Name: values.First_Name?.trim(),
+            Last_Name: values.Last_Name?.trim()
+          };
+          if (existing) {
+            await api.updateAuthor(id, payload);
+          } else {
+            await api.createAuthor(payload);
+          }
+        } else if (kind === "Categories") {
+          const payload = { Name: values.Name?.trim() };
+          if (existing) {
+            await api.updateCategory(id, payload);
+          } else {
+            await api.createCategory(payload);
+          }
+        } else if (kind === "Members") {
+          const payload = {
+            First_Name: values.First_Name?.trim(),
+            Last_Name: values.Last_Name?.trim(),
+            Contact: values.Contact?.trim(),
+            Email: values.Email?.trim() || null,
+            Joined_Date: values.Joined_Date || dateOnly()
+          };
+          if (existing) {
+            await api.updateMember(id, payload);
+          } else {
+            await api.createMember(payload);
+          }
+        }
+        await refreshDb();
+        setModal(null);
+        notify(existing ? "تغییرات با موفقیت در سرور ذخیره شد." : "مورد جدید با موفقیت در سرور ثبت شد.");
+        return;
+      } catch (err) {
+        return notify(err.message || "خطا در برقراری ارتباط با سرور", "error");
+      }
+    }
+
+    // Local Storage fallback
     if (kind === "Books") {
       const total = Math.max(0, Number(values.Total_Copies) || 0);
       const available = Math.max(0, Math.min(total, Number(values.Available_Copies) || 0));
@@ -458,8 +549,29 @@ function CrudPage({ kind, db, setDb, notify }) {
     notify(existing ? "تغییرات ذخیره شد." : "مورد جدید با موفقیت ثبت شد.");
   }
 
-  function remove(row) {
+  async function remove(row) {
     if (!window.confirm(`آیا از حذف این ${config.singular} مطمئن هستید؟`)) return;
+
+    if (isBackendConnected) {
+      try {
+        if (kind === "Books") {
+          await api.deleteBook(row.ID_Books);
+        } else if (kind === "Authors") {
+          await api.deleteAuthor(row.ID_Authors);
+        } else if (kind === "Categories") {
+          await api.deleteCategory(row.ID_Category);
+        } else if (kind === "Members") {
+          await api.deleteMember(row.ID_Members);
+        }
+        await refreshDb();
+        notify("مورد با موفقیت از سرور حذف شد.");
+        return;
+      } catch (err) {
+        return notify(err.message || "خطا در حذف مورد از سرور", "error");
+      }
+    }
+
+    // Local Storage fallback
     if (kind === "Books") {
       const copy = db.Copies.find((c) => c.Books_ID_Books === row.ID_Books);
       if (copy && db.Loans.some((l) => l.Copies_ID_Copies === copy.ID_Copies && !l.Return_date)) {
@@ -644,22 +756,40 @@ function AuthorsPage(props) { return <CrudPage kind="Authors" {...props} />; }
 function CategoriesPage(props) { return <CrudPage kind="Categories" {...props} />; }
 function MembersPage(props) { return <CrudPage kind="Members" {...props} />; }
 
-function LoansPage({ db, setDb, notify }) {
+function LoansPage({ db, setDb, notify, isBackendConnected, refreshDb }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [issueOpen, setIssueOpen] = useState(false);
   const [fineLoan, setFineLoan] = useState(null);
 
-  const loans = [...db.Loans].sort((a, b) => b.ID_Loans - a.ID_Loans).filter((loan) => {
+  const loans = [...(db.Loans || [])].sort((a, b) => b.ID_Loans - a.ID_Loans).filter((loan) => {
     const book = bookForCopy(db, loan.Copies_ID_Copies);
-    const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
+    const member = (db.Members || []).find((m) => m.ID_Members === loan.Members_ID_Members);
     const matchesQuery = `${book?.Title || ""} ${fullName(member)}`.toLowerCase().includes(query.toLowerCase());
     const overdue = isOverdue(loan.Due_date);
     const status = loan.Return_date ? "returned" : overdue ? "overdue" : "active";
     return matchesQuery && (filter === "all" || filter === status);
   });
 
-  function issue(values) {
+  async function issue(values) {
+    if (isBackendConnected) {
+      try {
+        await api.issueLoan({
+          Members_ID_Members: Number(values.memberId),
+          Books_ID_Books: Number(values.bookId),
+          Loan_date: values.loanDate || dateOnly(),
+          Due_date: values.dueDate
+        });
+        await refreshDb();
+        setIssueOpen(false);
+        notify("امانت جدید با موفقیت در سرور ثبت شد.");
+        return;
+      } catch (err) {
+        return notify(err.message || "خطا در ثبت امانت در سرور", "error");
+      }
+    }
+
+    // Local Storage fallback
     const copy = db.Copies.find((c) => c.Books_ID_Books === Number(values.bookId));
     if (!copy) return notify("برای این کتاب موجودی تعریف نشده است.", "error");
     if (copy.Available_Copies < 1) return notify("نسخهٔ قابل امانت موجود نیست.", "error");
@@ -681,8 +811,25 @@ function LoansPage({ db, setDb, notify }) {
     notify("امانت جدید با موفقیت ثبت شد.");
   }
 
-  function returnLoan(loan, fine) {
+  async function returnLoan(loan, fine) {
     if (!window.confirm("آیا بازگشت این کتاب به مخزن تأیید می‌شود؟")) return;
+
+    if (isBackendConnected) {
+      try {
+        await api.returnLoan(loan.ID_Loans, {
+          Return_date: dateOnly(),
+          Fine_Amount: fine !== undefined && fine !== null && fine !== "" ? Number(fine) : undefined
+        });
+        await refreshDb();
+        setFineLoan(null);
+        notify("بازگشت کتاب در سرور ثبت و موجودی مخزن به‌روزرسانی شد.");
+        return;
+      } catch (err) {
+        return notify(err.message || "خطا در ثبت بازگشت کتاب در سرور", "error");
+      }
+    }
+
+    // Local Storage fallback
     const copy = db.Copies.find((c) => c.ID_Copies === loan.Copies_ID_Copies);
     setDb({
       ...db,
