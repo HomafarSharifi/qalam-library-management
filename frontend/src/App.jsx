@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   NavLink, Navigate, Route, Routes, useLocation
 } from "react-router-dom";
@@ -57,7 +58,7 @@ function useModalA11y(onClose) {
     }
     requestAnimationFrame(() => {
       const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-      dialog?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus();
+      dialog?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
     });
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -469,13 +470,12 @@ const configs = {
   Books: {
     title: "کتاب‌ها", singular: "کتاب", id: "ID_Books",
     fields: [
-      { key: "Title", label: "عنوان کتاب", required: true },
-      { key: "ISBN", label: "ISBN", dir: "ltr" },
-      { key: "Description", label: "توضیحات", type: "textarea" },
-      { key: "Categories_ID_Category", label: "دسته‌بندی", type: "select", source: "Categories", sourceId: "ID_Category", sourceLabel: "Name" },
+      { key: "Title", label: "عنوان کتاب", required: true, maxLength: 100 },
+      { key: "ISBN", label: "ISBN", dir: "ltr", maxLength: 20 },
+      { key: "Description", label: "توضیحات", type: "textarea", maxLength: 16383 },
+      { key: "Categories_ID_Category", label: "دسته‌بندی", type: "select", source: "Categories", sourceId: "ID_Category", sourceLabel: "Name", required: true },
       { key: "Authors_ID_Authors", label: "نویسندگان", type: "multiselect", source: "Authors", sourceId: "ID_Authors", sourceLabel: "name" },
-      { key: "Total_Copies", label: "مجموع نسخه‌ها", type: "number", min: 0 },
-      { key: "Available_Copies", label: "نسخه‌های موجود", type: "number", min: 0 }
+      { key: "Total_Copies", label: "مجموع نسخه‌ها", type: "number", min: 0, max: 2147483647, precision: 10 }
     ],
     columns: [
       ["Title", "عنوان"], ["ISBN", "ISBN"], ["Categories_ID_Category", "دسته‌بندی"], ["authors", "نویسندگان"], ["copies", "نسخه‌ها"]
@@ -484,23 +484,23 @@ const configs = {
   Authors: {
     title: "نویسندگان", singular: "نویسنده", id: "ID_Authors",
     fields: [
-      { key: "First_Name", label: "نام", required: true },
-      { key: "Last_Name", label: "نام خانوادگی", required: true }
+      { key: "First_Name", label: "نام", required: true, maxLength: 45 },
+      { key: "Last_Name", label: "نام خانوادگی", required: true, maxLength: 45 }
     ],
     columns: [["name", "نام نویسنده"], ["bookCount", "کتاب‌های ثبت‌شده"]]
   },
   Categories: {
     title: "دسته‌بندی‌ها", singular: "دسته‌بندی", id: "ID_Category",
-    fields: [{ key: "Name", label: "نام دسته‌بندی", required: true }],
+    fields: [{ key: "Name", label: "نام دسته‌بندی", required: true, maxLength: 100 }],
     columns: [["Name", "نام دسته‌بندی"], ["bookCount", "تعداد کتاب‌ها"]]
   },
   Members: {
     title: "اعضا", singular: "عضو", id: "ID_Members",
     fields: [
-      { key: "First_Name", label: "نام", required: true },
-      { key: "Last_Name", label: "نام خانوادگی", required: true },
-      { key: "Email", label: "ایمیل", type: "email", dir: "ltr" },
-      { key: "Contact", label: "شماره تماس", dir: "ltr" },
+      { key: "First_Name", label: "نام", required: true, maxLength: 45 },
+      { key: "Last_Name", label: "نام خانوادگی", required: true, maxLength: 45 },
+      { key: "Email", label: "ایمیل", type: "email", dir: "ltr", maxLength: 75 },
+      { key: "Contact", label: "شماره تماس", dir: "ltr", maxLength: 15 },
       { key: "Joined_Date", label: "تاریخ عضویت (خورشیدی)", type: "date" }
     ],
     columns: [["name", "نام عضو"], ["Email", "ایمیل"], ["Contact", "شماره تماس"], ["Joined_Date", "تاریخ عضویت"]]
@@ -617,10 +617,11 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
     // Local Storage fallback
     if (kind === "Books") {
       const total = Math.max(0, Number(values.Total_Copies) || 0);
-      const available = Math.max(0, Math.min(total, Number(values.Available_Copies) || 0));
       delete record.Total_Copies;
-      delete record.Available_Copies;
       const copy = db.Copies.find((c) => c.Books_ID_Books === id);
+      const borrowed = copy ? Math.max(0, Number(copy.Total_Copies) - Number(copy.Available_Copies)) : 0;
+      if (total < borrowed) return notify(`مجموع نسخه‌ها نمی‌تواند کمتر از ${borrowed} نسخهٔ امانت‌داده‌شده باشد.`, "error");
+      const available = total - borrowed;
       const copies = copy
         ? db.Copies.map((c) => c.Books_ID_Books === id ? { ...c, Total_Copies: total, Available_Copies: available } : c)
         : [...db.Copies, { ID_Copies: nextId(db.Copies, "ID_Copies"), Books_ID_Books: id, Total_Copies: total, Available_Copies: available }];
@@ -632,6 +633,34 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
     }
     setModal(null);
     notify(existing ? "تغییرات ذخیره شد." : "مورد جدید با موفقیت ثبت شد.");
+  }
+
+  async function createRelatedRecord(relatedKind, values) {
+    const idField = configs[relatedKind].id;
+    if (isBackendConnected) {
+      try {
+        const created = relatedKind === "Authors"
+          ? await api.createAuthor({ First_Name: values.First_Name.trim(), Last_Name: values.Last_Name.trim() })
+          : await api.createCategory({ Name: values.Name.trim() });
+        await refreshDb();
+        notify(`${configs[relatedKind].singular} با موفقیت ثبت شد.`);
+        return created;
+      } catch (err) {
+        notify(err.message || `خطا در ثبت ${configs[relatedKind].singular}`, "error");
+        return null;
+      }
+    }
+
+    const created = relatedKind === "Authors"
+      ? { ID_Authors: nextId(db.Authors, idField), First_Name: values.First_Name.trim(), Last_Name: values.Last_Name.trim() }
+      : { ID_Category: nextId(db.Categories, idField), Name: values.Name.trim() };
+    if (relatedKind === "Categories" && db.Categories.some((category) => category.Name.trim().toLowerCase() === created.Name.toLowerCase())) {
+      notify("این دسته‌بندی قبلاً ثبت شده است.", "error");
+      return null;
+    }
+    setDb((current) => ({ ...current, [relatedKind]: [...current[relatedKind], created] }));
+    notify(`${configs[relatedKind].singular} با موفقیت ثبت شد.`);
+    return created;
   }
 
   async function remove(row) {
@@ -711,16 +740,19 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
         </table></div>
         {!rows.length && <EmptyState text={query ? "نتیجه‌ای پیدا نشد" : "هنوز موردی ثبت نشده است"} />}
       </section>
-      {modal && <RecordModal title={`${modal.row ? "ویرایش" : "افزودن"} ${config.singular}`} fields={config.fields} initial={formRow} db={db} onClose={() => setModal(null)} onSave={saveRecord} />}
+      {modal && <RecordModal title={`${modal.row ? "ویرایش" : "افزودن"} ${config.singular}`} fields={config.fields} initial={formRow} db={db} onClose={() => setModal(null)} onSave={saveRecord} onCreateRelated={createRelatedRecord} />}
       {detail && <DetailModal kind={kind} row={detail} db={db} onClose={() => setDetail(null)} />}
     </>
   );
 }
 
-function RecordModal({ title, fields, initial, db, onClose, onSave }) {
+function RecordModal({ title, fields, initial, db, onClose, onSave, onCreateRelated }) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [quickCreate, setQuickCreate] = useState(null);
+  const [relatedValues, setRelatedValues] = useState({});
+  const [relatedSaving, setRelatedSaving] = useState(false);
   const stableClose = useCallback(() => onClose(), [onClose]);
   useModalA11y(stableClose);
 
@@ -728,7 +760,11 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
     e.preventDefault();
     for (const field of fields) {
       if (field.required && !values[field.key]) return setError(`فیلد «${field.label}» الزامی است.`);
-      if (field.key === "Available_Copies" && Number(values[field.key]) > Number(values.Total_Copies)) return setError("نسخه‌های موجود نمی‌تواند بیشتر از مجموع نسخه‌ها باشد.");
+    }
+    if (fields.some((field) => field.key === "Total_Copies") && initial.ID_Books) {
+      const copy = db.Copies.find((item) => item.Books_ID_Books === initial.ID_Books);
+      const borrowed = copy ? Number(copy.Total_Copies) - Number(copy.Available_Copies) : 0;
+      if (Number(values.Total_Copies || 0) < borrowed) return setError(`مجموع نسخه‌ها نمی‌تواند کمتر از ${toPersianDigits(borrowed)} نسخهٔ امانت‌داده‌شده باشد.`);
     }
     setError("");
     setSaving(true);
@@ -739,9 +775,43 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
     }
   }
 
-  function change(key, value) { setValues((v) => ({ ...v, [key]: value })); }
+  function change(key, value) {
+    const field = fields.find((item) => item.key === key);
+    if (field?.maxLength && typeof value === "string") {
+      value = Array.from(value).slice(0, field.maxLength).join("");
+    }
+    if (field?.type === "number") {
+      const numberPattern = field.precision
+        ? new RegExp(`^\\d{0,${field.precision}}$`)
+        : /^\d*$/;
+      if (value !== "" && (!numberPattern.test(String(value)) || Number(value) > field.max)) return;
+    }
+    setValues((v) => ({ ...v, [key]: value }));
+  }
 
-  return (
+  async function createRelated(relatedKind) {
+    const newRecord = relatedKind === "Authors"
+      ? { First_Name: relatedValues.First_Name || "", Last_Name: relatedValues.Last_Name || "" }
+      : { Name: relatedValues.Name || "" };
+    if (Object.values(newRecord).some((value) => !value.trim())) return setError(relatedKind === "Authors" ? "نام و نام خانوادگی نویسنده را تکمیل کنید." : "نام دسته‌بندی را تکمیل کنید.");
+    setError("");
+    setRelatedSaving(true);
+    try {
+      const created = await onCreateRelated(relatedKind, newRecord);
+      if (!created) return;
+      if (relatedKind === "Authors") {
+        change("Authors_ID_Authors", [...(values.Authors_ID_Authors || []).map(Number), Number(created.ID_Authors)]);
+      } else {
+        change("Categories_ID_Category", Number(created.ID_Category));
+      }
+      setRelatedValues({});
+      setQuickCreate(null);
+    } finally {
+      setRelatedSaving(false);
+    }
+  }
+
+  return createPortal(
     <div className="modal-backdrop" role="presentation">
       <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-header">
@@ -765,13 +835,14 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
 
             if (field.type === "multiselect") {
               const selectedIds = (values[field.key] || []).map(Number);
+              const options = db[field.source] || [];
               return (
                 <div key={field.key} className="form-field wide" role="group" aria-labelledby={`label-${field.key}`}>
                   <span id={`label-${field.key}`}>
                     {field.label}{field.required && <i className="req-star"> *</i>}
                   </span>
-                  <div className="multiselect-chips">
-                    {(db[field.source] || []).map((item) => {
+                  {options.length ? <div className="multiselect-chips">
+                    {options.map((item) => {
                       const id = Number(item[field.sourceId]);
                       const isSelected = selectedIds.includes(id);
                       return (
@@ -792,17 +863,26 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
                         </button>
                       );
                     })}
-                  </div>
-                  <small className="multiselect-hint">برای انتخاب یا لغو انتخاب هر گزینه کلیک کنید.</small>
+                  </div> : <div className="related-empty-state">
+                    <small>هنوز نویسنده‌ای ثبت نشده است.</small>
+                    {quickCreate === "Authors" ? <div className="related-create-form">
+                      <input aria-label="نام نویسنده" placeholder="نام" maxLength={45} value={relatedValues.First_Name || ""} onChange={(e) => setRelatedValues((current) => ({ ...current, First_Name: e.target.value }))} />
+                      <input aria-label="نام خانوادگی نویسنده" placeholder="نام خانوادگی" maxLength={45} value={relatedValues.Last_Name || ""} onChange={(e) => setRelatedValues((current) => ({ ...current, Last_Name: e.target.value }))} />
+                      <button type="button" className="secondary-button" disabled={relatedSaving} onClick={() => createRelated("Authors")}>{relatedSaving ? "در حال ثبت..." : "ثبت و افزودن نویسنده"}</button>
+                      <button type="button" className="text-button" onClick={() => setQuickCreate(null)}>انصراف</button>
+                    </div> : <button type="button" className="inline-add-button" onClick={() => { setQuickCreate("Authors"); setRelatedValues({}); }}>افزودن نویسنده</button>}
+                  </div>}
+                  {options.length > 0 && <small className="multiselect-hint">برای انتخاب یا لغو انتخاب هر گزینه کلیک کنید.</small>}
                 </div>
               );
             }
 
             return (
-              <label key={field.key} className={`form-field ${field.type === "textarea" ? "wide" : ""}`}>
-                <span>{field.label}{field.required && <i className="req-star"> *</i>}</span>
+              <div key={field.key} className={`form-field ${field.type === "textarea" ? "wide" : ""}`}>
+                <label htmlFor={`field-${field.key}`}>{field.label}{field.required && <i className="req-star"> *</i>}</label>
                 {field.type === "select" ? (
-                  <select value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
+                  <>
+                  <select id={`field-${field.key}`} value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
                     <option value="">انتخاب کنید</option>
                     {(db[field.source] || []).map((item) => (
                       <option key={item[field.sourceId]} value={item[field.sourceId]}>
@@ -810,12 +890,24 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
                       </option>
                     ))}
                   </select>
+                  {field.source === "Categories" && !(db.Categories || []).length && <div className="related-empty-state compact">
+                    <small>هنوز دسته‌بندی‌ای ثبت نشده است.</small>
+                    {quickCreate === "Categories" ? <div className="related-create-form">
+                      <input aria-label="نام دسته‌بندی" placeholder="نام دسته‌بندی" maxLength={100} value={relatedValues.Name || ""} onChange={(e) => setRelatedValues((current) => ({ ...current, Name: e.target.value }))} />
+                      <button type="button" className="secondary-button" disabled={relatedSaving} onClick={() => createRelated("Categories")}>{relatedSaving ? "در حال ثبت..." : "ثبت و انتخاب دسته‌بندی"}</button>
+                      <button type="button" className="text-button" onClick={() => setQuickCreate(null)}>انصراف</button>
+                    </div> : <button type="button" className="inline-add-button" onClick={() => { setQuickCreate("Categories"); setRelatedValues({}); }}>افزودن دسته‌بندی</button>}
+                  </div>}
+                  </>
                 ) : field.type === "textarea" ? (
-                  <textarea rows="3" value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
+                  <textarea id={`field-${field.key}`} rows="3" maxLength={field.maxLength} value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
                 ) : (
-                  <input type={field.type || "text"} min={field.min} dir={field.dir} value={values[field.key] ?? ""} onChange={(e) => change(field.key, field.type === "number" ? e.target.value : e.target.value)} />
+                  <>
+                    <input id={`field-${field.key}`} type={field.type || "text"} min={field.min} max={field.max} maxLength={field.type === "number" ? undefined : field.maxLength} dir={field.dir} value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value)} />
+                    {field.key === "Total_Copies" && <small className="field-hint">تعداد کل نسخه‌های فیزیکی کتاب. نسخه‌های موجود هنگام امانت کم و هنگام بازگشت زیاد می‌شود.</small>}
+                  </>
                 )}
-              </label>
+              </div>
             );
           })}
         </div>
@@ -827,7 +919,8 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -846,7 +939,7 @@ function DetailModal({ kind, row, db, onClose }) {
     const copy = db.Copies.find((c) => c.Books_ID_Books === row.ID_Books);
     extra = <div className="detail-related"><strong>موجودی</strong><span>{copy ? `${toPersianDigits(copy.Available_Copies)} نسخه از ${toPersianDigits(copy.Total_Copies)} نسخه موجود` : "موجودی ثبت نشده است"}</span></div>;
   }
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation">
       <div className="modal detail-modal" role="dialog" aria-modal="true" aria-label={`جزئیات ${config.singular}`}>
         <div className="modal-header">
@@ -872,7 +965,8 @@ function DetailModal({ kind, row, db, onClose }) {
         {extra}
         <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose}>بستن پنجره</button></div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1074,7 +1168,7 @@ function IssueModal({ db, onClose, onSave }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation">
       <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label="ثبت امانت جدید">
         <div className="modal-header">
@@ -1130,7 +1224,8 @@ function IssueModal({ db, onClose, onSave }) {
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1162,7 +1257,7 @@ function ReturnModal({ loan, db, onClose, onSave }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation">
       <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label="ثبت بازگشت کتاب">
         <div className="modal-header">
@@ -1179,7 +1274,12 @@ function ReturnModal({ loan, db, onClose, onSave }) {
 
         <label className="form-field">
           <span>مبلغ جریمه تاخیر (افغانی)</span>
-          <input type="number" min="0" value={fine} onChange={(e) => setFine(e.target.value)} />
+          <input type="number" min="0" max="99999999.99" step="0.01" value={fine} onChange={(e) => {
+            const next = e.target.value;
+            if (next === "" || /^\d{0,8}(?:\.\d{0,2})?$/.test(next)) {
+              if (next === "" || Number(next) <= 99999999.99) setFine(next);
+            }
+          }} />
         </label>
 
         {overdue && (
@@ -1196,7 +1296,8 @@ function ReturnModal({ loan, db, onClose, onSave }) {
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 

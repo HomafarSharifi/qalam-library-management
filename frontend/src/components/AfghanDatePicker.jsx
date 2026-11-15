@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   AFGHAN_MONTHS,
   AFGHAN_WEEKDAYS,
@@ -21,7 +22,6 @@ export default function AfghanDatePicker({
   placeholder = "انتخاب تاریخ..."
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef(null);
 
   // Parse current value into Jalali year, month, day
   const currentJalali = value ? gregorianToJalali(value) : todayJalali();
@@ -37,22 +37,15 @@ export default function AfghanDatePicker({
   }, [value]);
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    }
     function handleKeyDown(e) {
       if (e.key === "Escape") {
         setIsOpen(false);
       }
     }
     if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
       document.addEventListener("keydown", handleKeyDown);
     }
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
@@ -113,7 +106,7 @@ export default function AfghanDatePicker({
     today.year === viewYear && today.month === viewMonth && today.day === day;
 
   return (
-    <div className="afghan-datepicker-container" ref={containerRef}>
+    <div className="afghan-datepicker-container">
       {label && (
         <span className="datepicker-label">
           {label} {required && <i className="req-star">*</i>}
@@ -134,8 +127,18 @@ export default function AfghanDatePicker({
         <ChevronDown size={14} className={`datepicker-chevron ${isOpen ? "flipped" : ""}`} aria-hidden="true" />
       </button>
 
-      {isOpen && (
-        <div className="datepicker-popover" role="dialog" aria-modal="true" aria-label="تقویم انتخاب تاریخ">
+      {isOpen && createPortal(
+        <div className="datepicker-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setIsOpen(false)}>
+          <section className="datepicker-calendar" role="dialog" aria-modal="true" aria-label={label ? `انتخاب ${label}` : "تقویم انتخاب تاریخ"}>
+            <div className="datepicker-dialog-heading">
+              <div>
+                <h2>{label ? `انتخاب ${label}` : "انتخاب تاریخ"}</h2>
+                <p>تاریخ را از تقویم هجری خورشیدی انتخاب کنید.</p>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setIsOpen(false)} aria-label="بستن تقویم">
+                <X size={18} />
+              </button>
+            </div>
           <div className="datepicker-header">
             <button
               type="button"
@@ -248,7 +251,9 @@ export default function AfghanDatePicker({
               +۳۰ روز
             </button>
           </div>
-        </div>
+          </section>
+        </div>,
+        document.body
       )}
     </div>
   );
