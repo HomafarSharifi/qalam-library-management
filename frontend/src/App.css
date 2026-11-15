@@ -252,6 +252,14 @@ a {
   align-items: center;
   gap: 10px;
   color: #838a95;
+  width: 100%;
+  text-align: right;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) ease;
+}
+
+.sidebar-foot:hover {
+  background: var(--color-bg-hover);
 }
 
 .mini-avatar,
@@ -1466,7 +1474,8 @@ tbody td {
 
 .modal {
   width: min(600px, 100%);
-  max-height: min(90vh, 780px);
+  max-height: min(94vh, 780px);
+  max-height: min(94dvh, 780px);
   overflow: hidden;
   overscroll-behavior: contain;
   background: var(--color-bg-elevated);
@@ -1499,7 +1508,7 @@ tbody td {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .modal-header h2 {
@@ -1515,10 +1524,172 @@ tbody td {
   font-size: var(--text-xs);
 }
 
+.database-tools-modal {
+  width: min(720px, 100%);
+}
+
+.database-tools-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  padding: 1px 2px 2px;
+}
+
+.database-tools-body::-webkit-scrollbar { width: 6px; }
+.database-tools-body::-webkit-scrollbar-track { background: transparent; }
+.database-tools-body::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-pill); }
+.database-tools-body::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+.database-tool-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.database-tool-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  background: var(--color-primary-light);
+  border-radius: var(--radius-md);
+}
+
+.database-tool-copy { flex: 1; min-width: 0; }
+.database-tool-copy strong { color: var(--color-text-heading); font-size: var(--text-sm); }
+.database-tool-copy p { margin: 3px 0 0; color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.6; }
+
+.export-tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.database-tool-heading { display: flex; align-items: center; gap: 12px; }
+
+.database-export-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.database-export-fields .form-field { margin: 0; }
+
+.export-format-options {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.export-format-button {
+  min-width: 0;
+  min-height: var(--control-height);
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.export-format-button:hover { background: var(--color-bg-hover); }
+.export-format-button.selected { color: var(--blue); background: var(--color-bg-elevated); box-shadow: var(--shadow-sm); }
+
+.export-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.export-action-row > small { color: var(--color-text-muted); font-size: var(--text-xs); }
+.pdf-export-hint { margin-top: -8px; }
+
+.database-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  background: var(--color-danger-light);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 24%, transparent);
+  border-radius: var(--radius-lg);
+}
+
+.database-danger-zone strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.database-danger-zone p { margin: 4px 0 0; color: var(--color-text-secondary); font-size: var(--text-xs); }
+
+.danger-button {
+  min-height: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  color: #fff;
+  background: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.danger-button:hover { filter: brightness(0.94); }
+.danger-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.database-tools-meta { display: flex; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: var(--text-xs); }
+.database-tools-meta .connected { color: var(--color-success); background: var(--color-success); }
+.database-tools-meta .offline { color: var(--color-warning); background: var(--color-warning); }
+
+.database-warning-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  color: var(--color-danger);
+  background: var(--color-danger-light);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
+  border-radius: var(--radius-lg);
+}
+
+.database-warning-card > svg { flex: 0 0 auto; }
+.database-warning-card strong { color: var(--color-danger); }
+.database-warning-card p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: var(--text-xs); line-height: 1.7; }
+.delete-confirm-field { margin: 0; }
+.delete-confirm-field input { direction: rtl; }
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
+  gap: 10px 12px;
 }
 
 .modal > .form-grid {
@@ -1527,6 +1698,31 @@ tbody td {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.modal > .form-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal > .form-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal > .form-grid::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.modal > .form-grid::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.modal > .form-grid > .form-field {
+  margin-bottom: 0;
 }
 
 .form-field {
@@ -1835,6 +2031,13 @@ tbody td {
   .form-grid { grid-template-columns: 1fr; gap: 0; }
   .wide { grid-column: auto; }
   .modal { padding: 18px; max-height: 85vh; }
+  .database-tools-modal { max-height: 90vh; }
+  .database-tool-card { align-items: flex-start; flex-wrap: wrap; }
+  .database-tool-card > .secondary-button { margin-inline-start: 52px; }
+  .database-export-fields { grid-template-columns: 1fr; gap: 8px; }
+  .database-danger-zone { align-items: flex-start; flex-direction: column; }
+  .database-danger-zone .danger-button { align-self: flex-start; }
+  .export-action-row { align-items: stretch; flex-direction: column; }
   .detail-list { grid-template-columns: 1fr; }
   .datepicker-calendar { padding: 16px; border-radius: 16px; }
   .toolbar {
@@ -1931,21 +2134,17 @@ tbody td {
 
 .related-empty-state {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px 16px;
-  padding: 14px 16px;
+  gap: 8px 12px;
+  min-height: var(--control-height);
+  padding: 10px 12px;
   color: var(--color-text-muted);
   background: var(--color-bg);
-  border: 1px dashed var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-}
-
-.related-empty-state.compact {
-  margin-top: 8px;
-  padding: 10px 12px;
+  font-size: var(--text-xs);
 }
 
 .inline-add-button,
@@ -1991,6 +2190,19 @@ tbody td {
 .related-create-form .secondary-button {
   min-height: var(--control-height-sm);
   padding: 0 12px;
+}
+
+.computed-field-value {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-variant-numeric: tabular-nums;
 }
 
 .field-hint {

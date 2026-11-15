@@ -7,7 +7,8 @@ import {
   Activity, BookOpen, ChartNoAxesCombined, ChevronDown, CirclePlus,
   Clock3, LayoutDashboard, Menu, Search, Tags, Users, X,
   Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info,
-  Moon, Sun, Check
+  Moon, Sun, Check, Database, Download, FileArchive, FileImage, FileSpreadsheet,
+  FileText, ShieldAlert, TriangleAlert
 } from "lucide-react";
 import logoUrl from "./assets/mark.svg";
 import profileUrl from "./assets/profile.png";
@@ -27,6 +28,7 @@ import {
 } from "./utils/afghanDate.js";
 import AfghanDatePicker from "./components/AfghanDatePicker.jsx";
 import DynamicActivityChart from "./components/DynamicActivityChart.jsx";
+import { buildExportTables, csvForTable, htmlForTablePrint, jpgBlobForTable } from "./utils/databaseExports.js";
 
 /** Shared modal accessibility: Escape to close, body scroll lock, focus restore */
 function useModalA11y(onClose) {
@@ -58,7 +60,9 @@ function useModalA11y(onClose) {
     }
     requestAnimationFrame(() => {
       const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-      dialog?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
+      const grid = dialog?.querySelector(":scope > .form-grid");
+      grid?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])')?.focus({ preventScroll: true });
+      if (grid) grid.scrollTop = 0;
     });
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -110,6 +114,7 @@ function App() {
   const [db, setDb] = useState(loadLibrary);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [databaseToolsOpen, setDatabaseToolsOpen] = useState(false);
   const [notice, setNotice] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem("qalam-theme");
@@ -162,6 +167,17 @@ function App() {
   const notify = (message, type = "success") => setNotice({ message, type });
   const pageTitle = PAGE_TITLES[location.pathname] || "کتابخانه";
 
+  async function clearAllDatabaseData() {
+    if (isBackendConnected) {
+      await api.clearDatabase({ confirmation: "حذف همه اطلاعات" });
+      setDb({ Categories: [], Authors: [], Books: [], Members: [], Copies: [], Loans: [] });
+      await refreshDb();
+    } else {
+      setDb({ Categories: [], Authors: [], Books: [], Members: [], Copies: [], Loans: [] });
+    }
+    notify("تمام اطلاعات حذف شد؛ ساختار پایگاه داده حفظ گردید.");
+  }
+
   return (
     <div className="app-shell" dir="rtl">
       {mobileNav && <button className="nav-scrim" aria-label="بستن منو" onClick={() => setMobileNav(false)} />}
@@ -199,13 +215,13 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-foot">
+        <button type="button" className="sidebar-foot" aria-haspopup="dialog" aria-expanded={databaseToolsOpen} onClick={() => setDatabaseToolsOpen(true)}>
           <div className="mini-avatar">
             <img src={profileUrl} alt="تصویر پروفایل مدیر" className="avatar-img" />
           </div>
           <div className="user-meta"><strong>مدیر کتابخانه</strong><span>همافر شریفی</span></div>
           <ChevronDown size={15} />
-        </div>
+        </button>
       </aside>
 
       <main className="main-area">
@@ -257,6 +273,13 @@ function App() {
         </div>
       </main>
 
+      {databaseToolsOpen && <DatabaseToolsModal
+        db={db}
+        isBackendConnected={isBackendConnected}
+        onClose={() => setDatabaseToolsOpen(false)}
+        onClearDatabase={clearAllDatabaseData}
+      />}
+
       {notice && (
         <div className={`toast ${notice.type}`} role="status" aria-live="polite">
           <span>{notice.type === "success" ? <CircleCheck size={18} /> : <CircleAlert size={18} />}</span>
@@ -265,6 +288,169 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function DatabaseToolsModal({ db, isBackendConnected, onClose, onClearDatabase }) {
+  const [tableId, setTableId] = useState("Books");
+  const [format, setFormat] = useState("csv");
+  const [backupCreated, setBackupCreated] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletePhrase, setDeletePhrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const stableClose = useCallback(() => onClose(), [onClose]);
+  useModalA11y(stableClose);
+  const tables = useMemo(() => buildExportTables(db), [db]);
+  const selectedTable = tables.find((table) => table.id === tableId) || tables[0];
+
+  function download(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function makeBackup() {
+    const booksAuthors = (db.Books || []).flatMap((book) => (book.Authors_ID_Authors || []).map((authorId) => ({
+      Books_ID_Books: book.ID_Books,
+      Authors_ID_Authors: authorId
+    })));
+    const snapshot = {
+      application: "Qalam Library Management System",
+      database: "Qalam",
+      exportedAt: new Date().toISOString(),
+      formatVersion: 1,
+      tables: {
+        Categories: db.Categories || [],
+        Books: db.Books || [],
+        Authors: db.Authors || [],
+        Members: db.Members || [],
+        Copies: db.Copies || [],
+        Loans: db.Loans || [],
+        Books_Authors: booksAuthors
+      }
+    };
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    download(new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json;charset=utf-8" }), `qalam-backup-${stamp}.json`);
+    setBackupCreated(true);
+    setError("");
+  }
+
+  function exportPdf() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("پنجره چاپ باز نشد. اجازه بازشدن پنجره جدید را در مرورگر فعال کنید.");
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(htmlForTablePrint(selectedTable));
+    printWindow.document.close();
+    setError("");
+  }
+
+  async function exportTable() {
+    setBusy(true);
+    setError("");
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      if (format === "csv") {
+        download(new Blob([csvForTable(selectedTable)], { type: "text/csv;charset=utf-8" }), `${selectedTable.id}-${stamp}.csv`);
+      } else if (format === "jpg") {
+        const blob = await jpgBlobForTable(selectedTable);
+        download(blob, `${selectedTable.id}-${stamp}.jpg`);
+      } else {
+        exportPdf();
+      }
+    } catch (exportError) {
+      setError(exportError.message || "ساخت خروجی ناموفق بود.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (deletePhrase !== "حذف همه اطلاعات") return;
+    setBusy(true);
+    setError("");
+    try {
+      await onClearDatabase();
+      onClose();
+    } catch (deleteError) {
+      setError(deleteError.message || "حذف اطلاعات ناموفق بود.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal database-tools-modal" role="dialog" aria-modal="true" aria-label="پشتیبان‌گیری و خروجی پایگاه داده">
+        <div className="modal-header">
+          <div>
+            <h2>{confirmingDelete ? "تأیید حذف اطلاعات" : "مدیریت و خروجی داده‌ها"}</h2>
+            <p>{confirmingDelete ? "این عملیات قابل بازگشت نیست؛ پیش از ادامه نسخه پشتیبان بگیرید." : "پشتیبان کامل بگیرید یا از یک جدول خروجی تهیه کنید."}</p>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="بستن"><X size={19} /></button>
+        </div>
+
+        {confirmingDelete ? (
+          <div className="database-tools-body">
+            <div className="database-warning-card">
+              <TriangleAlert size={22} />
+              <div><strong>پاک‌سازی همه جدول‌ها</strong><p>کتاب‌ها، نسخه‌ها، امانت‌ها، اعضا، نویسندگان و دسته‌بندی‌ها حذف می‌شوند. ساختار پایگاه داده حفظ خواهد شد.</p></div>
+            </div>
+            <label className="form-field delete-confirm-field">
+              <span>برای تأیید، عبارت «حذف همه اطلاعات» را وارد کنید.</span>
+              <input autoComplete="off" value={deletePhrase} onChange={(event) => setDeletePhrase(event.target.value)} placeholder="حذف همه اطلاعات" />
+            </label>
+            {!backupCreated && <div className="info-note"><FileArchive size={16} /><span>ابتدا از بخش قبلی نسخه پشتیبان دریافت کنید تا امکان ادامه فعال شود.</span></div>}
+            {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => { setConfirmingDelete(false); setDeletePhrase(""); setError(""); }} disabled={busy}>بازگشت</button>
+              <button type="button" className="danger-button" onClick={confirmDelete} disabled={busy || !backupCreated || deletePhrase !== "حذف همه اطلاعات"}>
+                <Trash2 size={16} />{busy ? "در حال حذف..." : "حذف دائمی داده‌ها"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="database-tools-body">
+            <section className="database-tool-card">
+              <div className="database-tool-icon"><Database size={20} /></div>
+              <div className="database-tool-copy"><strong>پشتیبان کامل پایگاه داده</strong><p>همه جدول‌ها به شکل یک فایل JSON ذخیره می‌شوند.</p></div>
+              <button type="button" className="secondary-button" onClick={makeBackup}><FileArchive size={16} />دریافت پشتیبان</button>
+            </section>
+
+            <section className="database-tool-card export-tool-card">
+              <div className="database-tool-heading"><div className="database-tool-icon"><Download size={20} /></div><div className="database-tool-copy"><strong>خروجی از یک جدول</strong><p>جدول و قالب فایل مورد نظر را انتخاب کنید.</p></div></div>
+              <div className="database-export-fields">
+                <label className="form-field"><span>جدول</span><select value={tableId} onChange={(event) => setTableId(event.target.value)}>{tables.map((table) => <option key={table.id} value={table.id}>{table.label}</option>)}</select></label>
+                <div className="form-field"><span>قالب خروجی</span><div className="export-format-options">
+                  {[{ id: "pdf", label: "PDF", icon: FileText }, { id: "jpg", label: "JPG", icon: FileImage }, { id: "csv", label: "CSV", icon: FileSpreadsheet }].map(({ id, label, icon: Icon }) => (
+                    <button key={id} type="button" className={`export-format-button ${format === id ? "selected" : ""}`} onClick={() => setFormat(id)} aria-pressed={format === id}><Icon size={16} />{label}</button>
+                  ))}
+                </div></div>
+              </div>
+              <div className="export-action-row"><small>{selectedTable.rows.length} ردیف در «{selectedTable.label}»</small><button type="button" className="primary-button" onClick={exportTable} disabled={busy}><Download size={16} />{busy ? "در حال آماده‌سازی..." : format === "pdf" ? "چاپ / ذخیره PDF" : `دریافت ${format.toUpperCase()}`}</button></div>
+              {format === "pdf" && <small className="field-hint pdf-export-hint">در پنجره چاپ مرورگر، گزینه «ذخیره به صورت PDF» را انتخاب کنید.</small>}
+            </section>
+
+            <section className="database-danger-zone">
+              <div><strong><ShieldAlert size={16} /> حذف اطلاعات پایگاه داده</strong><p>همه رکوردها پاک می‌شوند؛ طرح و جدول‌های پایگاه داده باقی می‌مانند.</p></div>
+              <button type="button" className="danger-button" onClick={() => { setConfirmingDelete(true); setError(""); }}><Trash2 size={16} />پاک‌سازی داده‌ها</button>
+            </section>
+            <div className="database-tools-meta"><span className={`status-dot ${isBackendConnected ? "connected" : "offline"}`} />{isBackendConnected ? "پایگاه داده متصل" : "حالت محلی؛ تغییرات فقط روی همین مرورگر اعمال می‌شود."}</div>
+            {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
+          </div>
+        )}
+      </section>
+    </div>,
+    document.body
   );
 }
 
@@ -472,10 +658,11 @@ const configs = {
     fields: [
       { key: "Title", label: "عنوان کتاب", required: true, maxLength: 100 },
       { key: "ISBN", label: "ISBN", dir: "ltr", maxLength: 20 },
-      { key: "Description", label: "توضیحات", type: "textarea", maxLength: 16383 },
+      { key: "Description", label: "توضیحات", type: "textarea", maxLength: 16383, rows: 2 },
       { key: "Categories_ID_Category", label: "دسته‌بندی", type: "select", source: "Categories", sourceId: "ID_Category", sourceLabel: "Name", required: true },
       { key: "Authors_ID_Authors", label: "نویسندگان", type: "multiselect", source: "Authors", sourceId: "ID_Authors", sourceLabel: "name" },
-      { key: "Total_Copies", label: "مجموع نسخه‌ها", type: "number", min: 0, max: 2147483647, precision: 10 }
+      { key: "Total_Copies", label: "مجموع نسخه‌ها", type: "number", min: 0, max: 2147483647, precision: 10 },
+      { key: "Available_Copies", label: "نسخه‌های موجود", type: "computedCopies" }
     ],
     columns: [
       ["Title", "عنوان"], ["ISBN", "ISBN"], ["Categories_ID_Category", "دسته‌بندی"], ["authors", "نویسندگان"], ["copies", "نسخه‌ها"]
@@ -704,9 +891,13 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
     notify("مورد با موفقیت حذف شد.");
   }
 
-  const formRow = modal?.row ? { ...modal.row } : kind === "Books" ? {
-    Categories_ID_Category: "", Authors_ID_Authors: [],
-    Total_Copies: 0, Available_Copies: 0
+  const formRow = modal?.row ? {
+    ...modal.row,
+    ...(kind === "Books" ? {
+      Total_Copies: db.Copies.find((copy) => copy.Books_ID_Books === modal.row.ID_Books)?.Total_Copies ?? 0
+    } : {})
+  } : kind === "Books" ? {
+    Categories_ID_Category: "", Authors_ID_Authors: [], Total_Copies: 0
   } : kind === "Members" ? { Joined_Date: dateOnly() } : {};
 
   return (
@@ -833,11 +1024,26 @@ function RecordModal({ title, fields, initial, db, onClose, onSave, onCreateRela
               );
             }
 
+            if (field.type === "computedCopies") {
+              const copy = initial.ID_Books
+                ? db.Copies.find((item) => item.Books_ID_Books === initial.ID_Books)
+                : null;
+              const borrowed = copy ? Number(copy.Total_Copies) - Number(copy.Available_Copies) : 0;
+              const available = Math.max(0, Number(values.Total_Copies || 0) - borrowed);
+              return (
+                <div key={field.key} className="form-field">
+                  <label>{field.label}</label>
+                  <output className="computed-field-value" aria-live="polite">{toPersianDigits(available)}</output>
+                  <small className="field-hint">پس از کسر امانت‌های جاری.</small>
+                </div>
+              );
+            }
+
             if (field.type === "multiselect") {
               const selectedIds = (values[field.key] || []).map(Number);
               const options = db[field.source] || [];
               return (
-                <div key={field.key} className="form-field wide" role="group" aria-labelledby={`label-${field.key}`}>
+                <div key={field.key} className="form-field" role="group" aria-labelledby={`label-${field.key}`}>
                   <span id={`label-${field.key}`}>
                     {field.label}{field.required && <i className="req-star"> *</i>}
                   </span>
@@ -882,29 +1088,32 @@ function RecordModal({ title, fields, initial, db, onClose, onSave, onCreateRela
                 <label htmlFor={`field-${field.key}`}>{field.label}{field.required && <i className="req-star"> *</i>}</label>
                 {field.type === "select" ? (
                   <>
-                  <select id={`field-${field.key}`} value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
-                    <option value="">انتخاب کنید</option>
-                    {(db[field.source] || []).map((item) => (
-                      <option key={item[field.sourceId]} value={item[field.sourceId]}>
-                        {item[field.sourceLabel] === "name" ? fullName(item) : item[field.sourceLabel]}
-                      </option>
-                    ))}
-                  </select>
-                  {field.source === "Categories" && !(db.Categories || []).length && <div className="related-empty-state compact">
-                    <small>هنوز دسته‌بندی‌ای ثبت نشده است.</small>
-                    {quickCreate === "Categories" ? <div className="related-create-form">
-                      <input aria-label="نام دسته‌بندی" placeholder="نام دسته‌بندی" maxLength={100} value={relatedValues.Name || ""} onChange={(e) => setRelatedValues((current) => ({ ...current, Name: e.target.value }))} />
-                      <button type="button" className="secondary-button" disabled={relatedSaving} onClick={() => createRelated("Categories")}>{relatedSaving ? "در حال ثبت..." : "ثبت و انتخاب دسته‌بندی"}</button>
-                      <button type="button" className="text-button" onClick={() => setQuickCreate(null)}>انصراف</button>
-                    </div> : <button type="button" className="inline-add-button" onClick={() => { setQuickCreate("Categories"); setRelatedValues({}); }}>افزودن دسته‌بندی</button>}
-                  </div>}
+                    {field.source === "Categories" && !(db.Categories || []).length ? (
+                      <div className="related-empty-state" aria-label="دسته‌بندی در دسترس نیست">
+                        <small>هنوز دسته‌بندی‌ای ثبت نشده است.</small>
+                        {quickCreate === "Categories" ? <div className="related-create-form">
+                          <input aria-label="نام دسته‌بندی" placeholder="نام دسته‌بندی" maxLength={100} value={relatedValues.Name || ""} onChange={(e) => setRelatedValues((current) => ({ ...current, Name: e.target.value }))} />
+                          <button type="button" className="secondary-button" disabled={relatedSaving} onClick={() => createRelated("Categories")}>{relatedSaving ? "در حال ثبت..." : "ثبت و انتخاب دسته‌بندی"}</button>
+                          <button type="button" className="text-button" onClick={() => setQuickCreate(null)}>انصراف</button>
+                        </div> : <button type="button" className="inline-add-button" onClick={() => { setQuickCreate("Categories"); setRelatedValues({}); }}>افزودن دسته‌بندی</button>}
+                      </div>
+                    ) : (
+                      <select id={`field-${field.key}`} value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
+                        <option value="">انتخاب کنید</option>
+                        {(db[field.source] || []).map((item) => (
+                          <option key={item[field.sourceId]} value={item[field.sourceId]}>
+                            {item[field.sourceLabel] === "name" ? fullName(item) : item[field.sourceLabel]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </>
                 ) : field.type === "textarea" ? (
-                  <textarea id={`field-${field.key}`} rows="3" maxLength={field.maxLength} value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
+                  <textarea id={`field-${field.key}`} rows={field.rows || 3} maxLength={field.maxLength} value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
                 ) : (
                   <>
                     <input id={`field-${field.key}`} type={field.type || "text"} min={field.min} max={field.max} maxLength={field.type === "number" ? undefined : field.maxLength} dir={field.dir} value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value)} />
-                    {field.key === "Total_Copies" && <small className="field-hint">تعداد کل نسخه‌های فیزیکی کتاب. نسخه‌های موجود هنگام امانت کم و هنگام بازگشت زیاد می‌شود.</small>}
+                    {field.key === "Total_Copies" && <small className="field-hint">تعداد کل نسخه‌های فیزیکی کتاب.</small>}
                   </>
                 )}
               </div>
@@ -957,6 +1166,8 @@ function DetailModal({ kind, row, db, onClose }) {
                   ? categoryName(db, row[field.key])
                   : field.key === "Authors_ID_Authors"
                   ? (row[field.key] || []).map((id) => fullName(db.Authors.find((a) => a.ID_Authors === id))).join("، ")
+                  : field.key === "Total_Copies" || field.key === "Available_Copies"
+                  ? toPersianDigits(db.Copies.find((copy) => copy.Books_ID_Books === row.ID_Books)?.[field.key] ?? 0)
                   : row[field.key] || "—"}
               </strong>
             </div>

@@ -11,7 +11,8 @@ from routers import (
     books_router,
     members_router,
     loans_router,
-    reports_router
+    reports_router,
+    admin_router
 )
 
 # Configure logging
@@ -87,6 +88,7 @@ app.include_router(books_router)
 app.include_router(members_router)
 app.include_router(loans_router)
 app.include_router(reports_router)
+app.include_router(admin_router)
 
 
 if __name__ == "__main__":

@@ -193,6 +193,9 @@ export async function fetchFullLibraryFromBackend() {
 
 // --- CRUD API Calls ---
 export const api = {
+  // Database administration
+  clearDatabase: (data) => request("/api/admin/data", { method: "DELETE", body: JSON.stringify(data) }),
+
   // Categories
   createCategory: (data) => request("/api/categories", { method: "POST", body: JSON.stringify(data) }),
   updateCategory: (id, data) => request(`/api/categories/${id}`, { method: "PUT", body: JSON.stringify(data) }),
