@@ -7,6 +7,7 @@ import {
   jalaliToGregorianIso,
   getDaysInJalaliMonth,
   formatAfghanDate,
+  localDateOnly,
   toPersianDigits,
   todayJalali
 } from "../utils/afghanDate.js";
@@ -41,10 +42,19 @@ export default function AfghanDatePicker({
         setIsOpen(false);
       }
     }
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
     }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen]);
 
   const daysInMonth = getDaysInJalaliMonth(viewYear, viewMonth);
@@ -65,7 +75,7 @@ export default function AfghanDatePicker({
   function handleQuickSelect(daysToAdd = 0) {
     const today = new Date();
     today.setDate(today.getDate() + daysToAdd);
-    const iso = today.toISOString().slice(0, 10);
+    const iso = localDateOnly(today);
     onChange(iso);
     const j = gregorianToJalali(iso);
     setViewYear(j.year);
@@ -114,24 +124,27 @@ export default function AfghanDatePicker({
         className={`datepicker-trigger ${isOpen ? "open" : ""} ${error ? "has-error" : ""}`}
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-label={label ? `${label} - ${value ? formatAfghanDate(value, { format: "full" }) : placeholder}` : "انتخاب تاریخ"}
       >
-        <Calendar size={16} className="datepicker-icon" />
+        <Calendar size={16} className="datepicker-icon" aria-hidden="true" />
         <span className="datepicker-value">
           {value ? formatAfghanDate(value, { format: "full" }) : placeholder}
         </span>
-        <ChevronDown size={14} className={`datepicker-chevron ${isOpen ? "flipped" : ""}`} />
+        <ChevronDown size={14} className={`datepicker-chevron ${isOpen ? "flipped" : ""}`} aria-hidden="true" />
       </button>
 
       {isOpen && (
-        <div className="datepicker-popover">
+        <div className="datepicker-popover" role="dialog" aria-modal="true" aria-label="تقویم انتخاب تاریخ">
           <div className="datepicker-header">
             <button
               type="button"
               className="datepicker-nav-btn"
               onClick={prevMonth}
               title="ماه قبل"
+              aria-label="ماه قبل"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
 
             <div className="datepicker-title">
@@ -139,6 +152,7 @@ export default function AfghanDatePicker({
                 className="datepicker-month-select"
                 value={viewMonth}
                 onChange={(e) => setViewMonth(Number(e.target.value))}
+                aria-label="انتخاب ماه"
               >
                 {AFGHAN_MONTHS.map((m, idx) => (
                   <option key={m} value={idx + 1}>
@@ -151,6 +165,7 @@ export default function AfghanDatePicker({
                 className="datepicker-year-select"
                 value={viewYear}
                 onChange={(e) => setViewYear(Number(e.target.value))}
+                aria-label="انتخاب سال"
               >
                 {[1400, 1401, 1402, 1403, 1404, 1405, 1406, 1407, 1408, 1409, 1410].map((y) => (
                   <option key={y} value={y}>
@@ -165,8 +180,9 @@ export default function AfghanDatePicker({
               className="datepicker-nav-btn"
               onClick={nextMonth}
               title="ماه بعد"
+              aria-label="ماه بعد"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} aria-hidden="true" />
             </button>
           </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   NavLink, Navigate, Route, Routes, useLocation
 } from "react-router-dom";
@@ -6,7 +6,7 @@ import {
   Activity, BookOpen, ChartNoAxesCombined, ChevronDown, CirclePlus,
   Clock3, LayoutDashboard, Menu, Search, Tags, Users, X,
   Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info,
-  Moon, Sun
+  Moon, Sun, Check
 } from "lucide-react";
 import logoUrl from "./assets/mark.svg";
 import profileUrl from "./assets/profile.png";
@@ -19,12 +19,56 @@ import {
 } from "./data/libraryService.js";
 import {
   formatAfghanDate,
+  localDateOnly,
   isOverdue,
   toPersianDigits,
   todayJalali
 } from "./utils/afghanDate.js";
 import AfghanDatePicker from "./components/AfghanDatePicker.jsx";
 import DynamicActivityChart from "./components/DynamicActivityChart.jsx";
+
+/** Shared modal accessibility: Escape to close, body scroll lock, focus restore */
+function useModalA11y(onClose) {
+  const prevFocusRef = useRef(null);
+
+  useEffect(() => {
+    prevFocusRef.current = document.activeElement;
+    document.body.classList.add("modal-open");
+
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key === "Tab") {
+        const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+        if (!dialog) return;
+        const items = [...dialog.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((item) => item.getClientRects().length);
+        if (!items.length) { e.preventDefault(); return; }
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+          e.preventDefault(); first.focus();
+        }
+      }
+    }
+    requestAnimationFrame(() => {
+      const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      dialog?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])')?.focus();
+    });
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.classList.remove("modal-open");
+      if (prevFocusRef.current && typeof prevFocusRef.current.focus === "function") {
+        prevFocusRef.current.focus();
+      }
+    };
+  }, [onClose]);
+}
 
 const NAV_GROUPS = [
   {
@@ -66,7 +110,21 @@ function App() {
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem("qalam-theme");
+    return savedTheme ? savedTheme === "dark" : (window.matchMedia?.("(prefers-color-scheme: dark)").matches || false);
+  });
   const location = useLocation();
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem("qalam-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("qalam-theme", "light");
+    }
+  }, [darkMode]);
 
   const refreshDb = async () => {
     try {
@@ -106,7 +164,7 @@ function App() {
   return (
     <div className="app-shell" dir="rtl">
       {mobileNav && <button className="nav-scrim" aria-label="بستن منو" onClick={() => setMobileNav(false)} />}
-      <aside className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
+      <aside id="primary-navigation" className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
         <div className="brand">
           <div className="brand-logo-container">
             <img src={logoUrl} alt="لوگوی کتابخانه قلم" className="brand-logo-img" />
@@ -151,7 +209,7 @@ function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileNav(true)} aria-label="باز کردن منو"><Menu size={20} /></button>
+          <button className="icon-button mobile-menu" onClick={() => setMobileNav(true)} aria-label="باز کردن منو" aria-expanded={mobileNav} aria-controls="primary-navigation"><Menu size={20} /></button>
           <div className="breadcrumb">
             <img src={logoUrl} alt="لوگو" className="breadcrumb-logo" />
             <span>/</span>
@@ -167,15 +225,24 @@ function App() {
             </div>
             <div className="today-afghan-badge" title="تقویم هجری خورشیدی (معیار رسمی افغانستان)">
               <Clock3 size={14} />
-              <span>{formatAfghanDate(new Date(), { format: "withWeekday" })}</span>
+              <span>{formatAfghanDate(dateOnly(), { format: "withWeekday" })}</span>
             </div>
+            <button
+              type="button"
+              className="icon-button theme-toggle-btn"
+              onClick={() => setDarkMode((prev) => !prev)}
+              title={darkMode ? "حالت روشن" : "حالت تاریک"}
+              aria-label={darkMode ? "فعال کردن حالت روشن" : "فعال کردن حالت تاریک"}
+            >
+              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
             <div className="top-avatar" title="حساب مدیر">
               <img src={profileUrl} alt="تصویر پروفایل مدیر" className="avatar-img" />
             </div>
           </div>
         </header>
 
-        <div className="page-wrap">
+        <div className={`page-wrap${location.pathname === "/loans" ? " loans-page" : ""}`}>
           <Routes>
             <Route path="/" element={<Dashboard db={db} />} />
             <Route path="/books" element={<BooksPage db={db} setDb={setDb} notify={notify} isBackendConnected={isBackendConnected} refreshDb={refreshDb} />} />
@@ -190,9 +257,10 @@ function App() {
       </main>
 
       {notice && (
-        <div className={`toast ${notice.type}`}>
+        <div className={`toast ${notice.type}`} role="status" aria-live="polite">
           <span>{notice.type === "success" ? <CircleCheck size={18} /> : <CircleAlert size={18} />}</span>
-          {notice.message}
+          <span>{notice.message}</span>
+          <button type="button" className="toast-dismiss" onClick={() => setNotice(null)} aria-label="بستن اعلان"><X size={14} /></button>
         </div>
       )}
     </div>
@@ -376,9 +444,25 @@ function EmptyState({ text }) {
 }
 
 function StatusBadge({ loan }) {
-  if (loan.Return_date) return <span className="status returned">بازگشت‌شده</span>;
+  if (loan.Return_date) {
+    return (
+      <span className="status returned">
+        <CircleCheck size={12} aria-hidden="true" />
+        <span>بازگشت‌شده</span>
+      </span>
+    );
+  }
   const overdue = isOverdue(loan.Due_date);
-  return <span className={`status ${overdue ? "overdue" : "active-status"}`}>{overdue ? "دیرشده" : "فعال"}</span>;
+  return (
+    <span className={`status ${overdue ? "overdue" : "active-status"}`}>
+      {overdue ? (
+        <CircleAlert size={12} aria-hidden="true" />
+      ) : (
+        <span className="status-live-dot" aria-hidden="true" />
+      )}
+      <span>{overdue ? "دیرشده" : "فعال"}</span>
+    </span>
+  );
 }
 
 const configs = {
@@ -607,7 +691,7 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
           <span className="result-count">{toPersianDigits(rows.length)} مورد</span>
         </div>
         <div className="table-scroll"><table className="data-table">
-          <thead><tr>{config.columns.map(([key, label]) => <th key={key}><button className="sort-button" onClick={() => setSort({ key, direction: sort.key === key ? -sort.direction : 1 })}>{label}<ArrowUpDown size={13} /></button></th>)}<th>عملیات</th></tr></thead>
+          <thead><tr>{config.columns.map(([key, label]) => <th key={key}><button className="sort-button" aria-label={`مرتب‌سازی بر اساس ${label}`} onClick={() => setSort({ key, direction: sort.key === key ? -sort.direction : 1 })}>{label}<ArrowUpDown size={13} /></button></th>)}<th>عملیات</th></tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row[config.id]}>
@@ -617,9 +701,9 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
                   </td>
                 ))}
                 <td><div className="row-actions">
-                  <button className="action-icon" title="جزئیات" onClick={() => setDetail(row)}><Eye size={16} /></button>
-                  <button className="action-icon" title="ویرایش" onClick={() => setModal({ row })}><Pencil size={16} /></button>
-                  <button className="action-icon danger" title="حذف" onClick={() => remove(row)}><Trash2 size={16} /></button>
+                  <button className="action-icon" title="جزئیات" aria-label="جزئیات" onClick={() => setDetail(row)}><Eye size={16} /></button>
+                  <button className="action-icon" title="ویرایش" aria-label="ویرایش" onClick={() => setModal({ row })}><Pencil size={16} /></button>
+                  <button className="action-icon danger" title="حذف" aria-label="حذف" onClick={() => remove(row)}><Trash2 size={16} /></button>
                 </div></td>
               </tr>
             ))}
@@ -636,25 +720,33 @@ function CrudPage({ kind, db, setDb, notify, isBackendConnected, refreshDb }) {
 function RecordModal({ title, fields, initial, db, onClose, onSave }) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const stableClose = useCallback(() => onClose(), [onClose]);
+  useModalA11y(stableClose);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     for (const field of fields) {
       if (field.required && !values[field.key]) return setError(`فیلد «${field.label}» الزامی است.`);
       if (field.key === "Available_Copies" && Number(values[field.key]) > Number(values.Total_Copies)) return setError("نسخه‌های موجود نمی‌تواند بیشتر از مجموع نسخه‌ها باشد.");
     }
     setError("");
-    onSave(values);
+    setSaving(true);
+    try {
+      await onSave(values);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function change(key, value) { setValues((v) => ({ ...v, [key]: value })); }
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form className="modal" onSubmit={submit}>
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-header">
           <div><h2>{title}</h2><p>اطلاعات را وارد نموده و ذخیره فرمایید.</p></div>
-          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="بستن"><X size={19} /></button>
         </div>
         <div className="form-grid">
           {fields.map((field) => {
@@ -671,8 +763,43 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
               );
             }
 
+            if (field.type === "multiselect") {
+              const selectedIds = (values[field.key] || []).map(Number);
+              return (
+                <div key={field.key} className="form-field wide" role="group" aria-labelledby={`label-${field.key}`}>
+                  <span id={`label-${field.key}`}>
+                    {field.label}{field.required && <i className="req-star"> *</i>}
+                  </span>
+                  <div className="multiselect-chips">
+                    {(db[field.source] || []).map((item) => {
+                      const id = Number(item[field.sourceId]);
+                      const isSelected = selectedIds.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`multiselect-chip ${isSelected ? "selected" : ""}`}
+                          onClick={() => {
+                            const next = isSelected
+                              ? selectedIds.filter((x) => x !== id)
+                              : [...selectedIds, id];
+                            change(field.key, next);
+                          }}
+                          aria-pressed={isSelected}
+                        >
+                          <span>{fullName(item)}</span>
+                          {isSelected && <Check size={13} aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <small className="multiselect-hint">برای انتخاب یا لغو انتخاب هر گزینه کلیک کنید.</small>
+                </div>
+              );
+            }
+
             return (
-              <label key={field.key} className={`form-field ${field.type === "textarea" || field.type === "multiselect" ? "wide" : ""}`}>
+              <label key={field.key} className={`form-field ${field.type === "textarea" ? "wide" : ""}`}>
                 <span>{field.label}{field.required && <i className="req-star"> *</i>}</span>
                 {field.type === "select" ? (
                   <select value={values[field.key] ?? ""} onChange={(e) => change(field.key, e.target.value ? Number(e.target.value) : "")}>
@@ -683,26 +810,21 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
                       </option>
                     ))}
                   </select>
-                ) : field.type === "multiselect" ? (
-                  <select multiple value={values[field.key] || []} onChange={(e) => change(field.key, [...e.target.selectedOptions].map((o) => Number(o.value)))}>
-                    {(db[field.source] || []).map((item) => (
-                      <option key={item[field.sourceId]} value={item[field.sourceId]}>{fullName(item)}</option>
-                    ))}
-                  </select>
                 ) : field.type === "textarea" ? (
                   <textarea rows="3" value={values[field.key] || ""} onChange={(e) => change(field.key, e.target.value)} />
                 ) : (
                   <input type={field.type || "text"} min={field.min} dir={field.dir} value={values[field.key] ?? ""} onChange={(e) => change(field.key, field.type === "number" ? e.target.value : e.target.value)} />
                 )}
-                {field.type === "multiselect" && <small>برای انتخاب چند گزینه، کلید Ctrl یا ⌘ را نگه دارید.</small>}
               </label>
             );
           })}
         </div>
         {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
-          <button className="primary-button" type="submit">ذخیره اطلاعات</button>
+          <button type="button" className="secondary-button" onClick={onClose} disabled={saving}>انصراف</button>
+          <button className="primary-button" type="submit" disabled={saving}>
+            {saving ? "در حال ذخیره..." : "ذخیره اطلاعات"}
+          </button>
         </div>
       </form>
     </div>
@@ -711,6 +833,8 @@ function RecordModal({ title, fields, initial, db, onClose, onSave }) {
 
 function DetailModal({ kind, row, db, onClose }) {
   const config = configs[kind];
+  const stableClose = useCallback(() => onClose(), [onClose]);
+  useModalA11y(stableClose);
   let extra = null;
   if (kind === "Authors") {
     const books = db.Books.filter((b) => b.Authors_ID_Authors?.includes(row.ID_Authors));
@@ -723,11 +847,11 @@ function DetailModal({ kind, row, db, onClose }) {
     extra = <div className="detail-related"><strong>موجودی</strong><span>{copy ? `${toPersianDigits(copy.Available_Copies)} نسخه از ${toPersianDigits(copy.Total_Copies)} نسخه موجود` : "موجودی ثبت نشده است"}</span></div>;
   }
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal detail-modal">
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal detail-modal" role="dialog" aria-modal="true" aria-label={`جزئیات ${config.singular}`}>
         <div className="modal-header">
           <div><h2>جزئیات {config.singular}</h2><p>شناسه سیستمی: <bdi>{toPersianDigits(row[config.id])}</bdi></p></div>
-          <button className="icon-button" onClick={onClose}><X size={19} /></button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="بستن"><X size={19} /></button>
         </div>
         <div className="detail-list">
           {config.fields.map((field) => (
@@ -746,7 +870,7 @@ function DetailModal({ kind, row, db, onClose }) {
           ))}
         </div>
         {extra}
-        <div className="modal-actions"><button className="primary-button" onClick={onClose}>بستن پنجره</button></div>
+        <div className="modal-actions"><button type="button" className="primary-button" onClick={onClose}>بستن پنجره</button></div>
       </div>
     </div>
   );
@@ -914,11 +1038,14 @@ function LoansPage({ db, setDb, notify, isBackendConnected, refreshDb }) {
 }
 
 function IssueModal({ db, onClose, onSave }) {
+  const stableClose = useCallback(() => onClose(), [onClose]);
+  useModalA11y(stableClose);
+
   // Default loan date is today, default due date is +14 days
   const todayIso = dateOnly();
   const defaultDue = new Date();
   defaultDue.setDate(defaultDue.getDate() + 14);
-  const defaultDueIso = defaultDue.toISOString().slice(0, 10);
+  const defaultDueIso = localDateOnly(defaultDue);
 
   const [form, setForm] = useState({
     memberId: "",
@@ -927,25 +1054,32 @@ function IssueModal({ db, onClose, onSave }) {
     dueDate: defaultDueIso
   });
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const availableBooks = db.Books.filter((b) => {
     const copy = db.Copies.find((c) => c.Books_ID_Books === b.ID_Books);
     return copy && copy.Available_Copies > 0;
   });
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     if (!form.memberId || !form.bookId || !form.loanDate || !form.dueDate) return setError("تکمیل تمام فیلدها الزامی است.");
     if (form.dueDate < form.loanDate) return setError("موعد بازگشت نباید قبل از تاریخ امانت باشد.");
-    onSave(form);
+    setError("");
+    setSaving(true);
+    try {
+      await onSave(form);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="modal-backdrop">
-      <form className="modal" onSubmit={submit}>
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label="ثبت امانت جدید">
         <div className="modal-header">
           <div><h2>ثبت امانت جدید</h2><p>انتخاب عضو و کتاب بر اساس تقویم خورشیدی</p></div>
-          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="بستن"><X size={19} /></button>
         </div>
         <div className="form-grid">
           <label className="form-field">
@@ -990,8 +1124,10 @@ function IssueModal({ db, onClose, onSave }) {
 
         {error && <div className="form-error"><CircleAlert size={16} />{error}</div>}
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
-          <button className="primary-button" type="submit">تأیید و ثبت امانت</button>
+          <button type="button" className="secondary-button" onClick={onClose} disabled={saving}>انصراف</button>
+          <button className="primary-button" type="submit" disabled={saving}>
+            {saving ? "در حال ثبت..." : "تأیید و ثبت امانت"}
+          </button>
         </div>
       </form>
     </div>
@@ -999,6 +1135,8 @@ function IssueModal({ db, onClose, onSave }) {
 }
 
 function ReturnModal({ loan, db, onClose, onSave }) {
+  const stableClose = useCallback(() => onClose(), [onClose]);
+  useModalA11y(stableClose);
   const overdue = isOverdue(loan.Due_date);
   // Calculate overdue days
   let daysLate = 0;
@@ -1009,16 +1147,27 @@ function ReturnModal({ loan, db, onClose, onSave }) {
   }
   const suggestedFine = daysLate * 5; // 5 Afghanis per day late
   const [fine, setFine] = useState(loan.Fine_Amount || suggestedFine);
+  const [saving, setSaving] = useState(false);
 
   const book = bookForCopy(db, loan.Copies_ID_Copies);
   const member = db.Members.find((m) => m.ID_Members === loan.Members_ID_Members);
 
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(fine);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="modal-backdrop">
-      <form className="modal" onSubmit={(e) => { e.preventDefault(); onSave(fine); }}>
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label="ثبت بازگشت کتاب">
         <div className="modal-header">
           <div><h2>ثبت بازگشت کتاب</h2><p>کتاب: «{book?.Title}» — عضو: {fullName(member)}</p></div>
-          <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="بستن"><X size={19} /></button>
         </div>
 
         <div className="detail-list" style={{ marginBottom: "14px" }}>
@@ -1041,8 +1190,10 @@ function ReturnModal({ loan, db, onClose, onSave }) {
         )}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>انصراف</button>
-          <button className="primary-button" type="submit">تأیید بازگشت و ثبت در سیستم</button>
+          <button type="button" className="secondary-button" onClick={onClose} disabled={saving}>انصراف</button>
+          <button className="primary-button" type="submit" disabled={saving}>
+            {saving ? "در حال ثبت..." : "تأیید بازگشت و ثبت در سیستم"}
+          </button>
         </div>
       </form>
     </div>
@@ -1063,7 +1214,7 @@ function ReportsPage({ db }) {
   return (
     <>
       <PageHeading title="گزارش‌های کتابخانه" subtitle="تحلیل و بررسی داده‌های عملیاتی در تقویم رسمی افغانستان" />
-      <div className="report-tabs">
+      <div className="report-tabs" role="tablist" aria-label="گزارش‌های کتابخانه">
         {[
           ["history", "تاریخچه امانت‌ها"],
           ["overdue", "دیرشده‌ها"],
@@ -1071,7 +1222,7 @@ function ReportsPage({ db }) {
           ["categories", "دسته‌بندی‌ها"],
           ["fines", "جریمه‌ها"]
         ].map(([key, label]) => (
-          <button key={key} className={report === key ? "selected" : ""} onClick={() => setReport(key)}>
+          <button key={key} role="tab" aria-selected={report === key} className={report === key ? "selected" : ""} onClick={() => setReport(key)}>
             {label}
           </button>
         ))}

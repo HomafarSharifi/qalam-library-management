@@ -159,9 +159,11 @@ export default function DynamicActivityChart({ db }) {
           <h2>فعالیت ماهانه کتابخانه</h2>
           <p>امانت‌ها و بازگشت‌های ثبت‌شده در ماه‌های خورشیدی (افغانستان)</p>
         </div>
-        <div className="chart-range-buttons">
+        <div className="chart-range-buttons" role="tablist" aria-label="بازه زمانی نمودار">
           <button
             type="button"
+            role="tab"
+            aria-selected={range === "6m"}
             className={`range-btn ${range === "6m" ? "active" : ""}`}
             onClick={() => setRange("6m")}
           >
@@ -169,6 +171,8 @@ export default function DynamicActivityChart({ db }) {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={range === "12m"}
             className={`range-btn ${range === "12m" ? "active" : ""}`}
             onClick={() => setRange("12m")}
           >
@@ -257,7 +261,12 @@ export default function DynamicActivityChart({ db }) {
                 key={`pt-l-${idx}`}
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
-                style={{ cursor: "pointer" }}
+                onFocus={() => setHoveredIndex(idx)}
+                onBlur={() => setHoveredIndex(null)}
+                tabIndex={0}
+                role="button"
+                aria-label={`${pt.month} ${toPersianDigits(pt.year)}: ${toPersianDigits(pt.value)} امانت ثبت‌شده`}
+                style={{ cursor: "pointer", outline: "none" }}
               >
                 <circle
                   cx={pt.x}
@@ -276,7 +285,12 @@ export default function DynamicActivityChart({ db }) {
                 key={`pt-r-${idx}`}
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
-                style={{ cursor: "pointer" }}
+                onFocus={() => setHoveredIndex(idx)}
+                onBlur={() => setHoveredIndex(null)}
+                tabIndex={0}
+                role="button"
+                aria-label={`${pt.month} ${toPersianDigits(pt.year)}: ${toPersianDigits(pt.value)} بازگشت ثبت‌شده`}
+                style={{ cursor: "pointer", outline: "none" }}
               >
                 <circle
                   cx={pt.x}
@@ -317,9 +331,13 @@ export default function DynamicActivityChart({ db }) {
         {monthlyData.map((d, idx) => (
           <span
             key={idx}
+            tabIndex={0}
+            role="button"
             className={`xlabel ${hoveredIndex === idx ? "active" : ""}`}
             onMouseEnter={() => setHoveredIndex(idx)}
             onMouseLeave={() => setHoveredIndex(null)}
+            onFocus={() => setHoveredIndex(idx)}
+            onBlur={() => setHoveredIndex(null)}
           >
             {d.name}
           </span>

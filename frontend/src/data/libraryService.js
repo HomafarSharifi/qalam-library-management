@@ -1,3 +1,5 @@
+import { localDateOnly } from "../utils/afghanDate.js";
+
 /**
  * Library Service & Backend API Client for Qalam
  * Handles communication with the FastAPI backend with offline fallback.
@@ -84,7 +86,7 @@ export function nextId(rows, field) {
 }
 
 export function dateOnly() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateOnly();
 }
 
 export function fullName(person) {
@@ -224,3 +226,4 @@ export const api = {
   getOverdueReport: () => request("/api/reports/overdue"),
   getMonthlyActivity: (months = 6) => request(`/api/reports/activity?months=${months}`)
 };
+

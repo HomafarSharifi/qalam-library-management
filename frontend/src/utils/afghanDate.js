@@ -49,6 +49,21 @@ export function toEnglishDigits(value) {
     .replace(/[٠-٩]/g, (d) => ARABIC_DIGITS.indexOf(d).toString());
 }
 
+/** Return the local calendar day as YYYY-MM-DD without converting through UTC. */
+export function localDateOnly(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Add calendar days in local time, avoiding DST/UTC date shifts. */
+export function addLocalDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 /**
  * Converts any Date object or ISO string (YYYY-MM-DD) to Jalali { year, month, day }
  */
@@ -151,7 +166,7 @@ export function getDaysInJalaliMonth(year, month) {
  * Returns today's date in Jalali
  */
 export function todayJalali() {
-  return gregorianToJalali(new Date());
+  return gregorianToJalali(localDateOnly());
 }
 
 /**
@@ -206,7 +221,7 @@ export function formatAfghanDate(dateInput, options = {}) {
  */
 export function isOverdue(dueDate) {
   if (!dueDate) return false;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = localDateOnly();
   const dueIso = typeof dueDate === "string" ? dueDate.slice(0, 10) : dueDate;
   return dueIso < todayIso;
 }
