@@ -1,0 +1,68 @@
+/*
+   Semantic Design Tokens – Apple‑inspired foundation
+   ------------------------------------------------
+   These tokens map the existing raw CSS variables to a semantic layer.
+   They are deliberately lightweight: plain CSS custom properties that
+   can be consumed anywhere in the app without requiring any JS changes.
+   Future dark‑mode overrides can be added in a separate file.
+*/
+
+:root {
+  /* ------- Color Palette ------- */
+  /* Primary (interactive) */
+  --color-primary: var(--accent);                /* #2864d7 */
+  --color-primary-hover: var(--blue-hover);      /* #1f52b8 */
+  --color-primary-bg: var(--accent-bg);          /* rgba(40,100,215,0.08) */
+  --color-primary-border: var(--accent-border);  /* rgba(40,100,215,0.4) */
+
+  /* Success / Error */
+  --color-success: var(--green);                /* #48b874 */
+  --color-success-bg: var(--green-light);
+  --color-danger: var(--red);                  /* #df5858 */
+  --color-danger-bg: var(--red-light);
+
+  /* Neutral */
+  --color-muted: var(--muted);                 
+  --color-border: var(--line);
+  --color-background: var(--bg);
+  --color-surface: var(--card-bg);
+
+  /* Text */
+  --color-text-primary: var(--text);
+  --color-text-heading: var(--text-h);
+
+  /* ------- Elevation & Shadow ------- */
+  --elevation-1: var(--shadow-sm);
+  --elevation-2: var(--shadow-md);
+  --elevation-3: var(--shadow-lg);
+
+  /* ------- Radius ------- */
+  --radius-base: 8px;   /* Apple guideline – subtle rounding */
+  --radius-pill: 9999px;
+
+  /* ------- Spacing Scale (4‑step) ------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* ------- Motion ------- */
+  --duration-short: 150ms;
+  --duration-medium: 250ms;
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark‑mode overrides – can be extended later */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0b0d0f;
+    --color-surface: #111418;
+    --color-text-primary: #e1e3e5;
+    --color-text-heading: #f5f6f7;
+    --color-muted: #6b7280;
+    --color-border: #2d3138;
+    /* keep primary colors as‑is for brand consistency */
+  }
+}

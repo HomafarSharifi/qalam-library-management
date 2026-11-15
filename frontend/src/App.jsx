@@ -5,7 +5,8 @@ import {
 import {
   Activity, BookOpen, ChartNoAxesCombined, ChevronDown, CirclePlus,
   Clock3, LayoutDashboard, Menu, Search, Tags, Users, X,
-  Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info
+  Pencil, Trash2, Eye, ArrowUpDown, CircleCheck, CircleAlert, Info,
+  Moon, Sun
 } from "lucide-react";
 import logoUrl from "./assets/mark.svg";
 import profileUrl from "./assets/profile.png";

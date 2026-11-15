@@ -13,7 +13,7 @@ from routers.authors import (
     update_author,
     delete_author
 )
-from schemas.authors import AuthorCreate, AuthorUpdate
+from ..schemas.authors import AuthorCreate, AuthorUpdate
 
 
 class TestAuthorsRouter(unittest.TestCase):

@@ -1,9 +1,9 @@
-from routers.categories import router as categories_router
-from routers.authors import router as authors_router
-from routers.books import router as books_router
-from routers.members import router as members_router
-from routers.loans import router as loans_router
-from routers.reports import router as reports_router
+from .categories import router as categories_router
+from .authors import router as authors_router
+from .books import router as books_router
+from .members import router as members_router
+from .loans import router as loans_router
+from .reports import router as reports_router
 
 __all__ = [
     "categories_router",
